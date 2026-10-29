@@ -60,6 +60,7 @@ border-radius:10px;padding:13px;min-width:0}
 .track.drop-target{border-color:var(--accent)}
 .track-head{display:flex;align-items:center;gap:9px;margin-bottom:10px}
 .track-select{width:18px;height:18px;flex:none}
+#transientPreview{white-space:pre-wrap;overflow-wrap:anywhere;background:#111117;border:1px solid var(--border);border-radius:8px;padding:10px;line-height:1.65}
 .bulk-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:0 0 12px}.bulk-controls .row{align-items:stretch}.bulk-controls input{min-width:80px;flex:1}@media(max-width:600px){.bulk-controls{grid-template-columns:1fr}}.track-head .track-select-label{display:flex;align-items:center;gap:5px;color:var(--muted);font-size:11px;flex:none}
 .track-name{font-weight:750;overflow-wrap:anywhere;flex:1;min-width:0}
 .track-number{color:var(--accent);font-size:12px}
@@ -1378,8 +1379,18 @@ $("transientPreviewBtn").addEventListener("click", () => {
   const boundaries = [source.startTrim, ...candidates.filter(time => time > source.startTrim + 0.08).slice(0, 15), source.end]
     .filter((time, i, list) => i === 0 || time - list[i-1] >= 0.12);
   const segmentCount = Math.max(0, boundaries.length - 1);
+  const previewBpm = clamp(Number(bpmInput.value) || 120, 40, 240);
+  const beatSeconds = 60 / previewBpm;
+  const candidateDetails = candidates.slice(0, 10).map((time, index) =>
+    (index + 1) + ". " + time.toFixed(2) + "秒（約" +
+    (time / beatSeconds).toFixed(2) + "拍目）"
+  ).join(" / ");
+  const omitted = candidates.length > 10 ? " / ほか " + (candidates.length - 10) + "か所" : "";
   $("transientPreview").textContent = segmentCount >= 2
-    ? "検出候補：" + candidates.length + "か所 / 分割予定：" + segmentCount + "個。感度を上げると小さな音の変化も検出しやすくなりますが、不要な区切りも増える場合があります。実行前に再生して確認してください。"
+    ? "検出候補：" + candidates.length + "か所 / 分割予定：" + segmentCount + "個\\n" +
+      "対象範囲：" + source.startTrim.toFixed(2) + "〜" + source.end.toFixed(2) + "秒 / BPM " + previewBpm + "\\n" +
+      "候補時刻：" + candidateDetails + omitted + "\\n" +
+      "注意：音量変化からの推定です。候補が意図した音の頭とは限らないため、適用前に再生して確認してください。"
     : "分割候補が少なすぎます。感度を上げるか、別の素材を選んでください。";
 });
 $("transientSensitivity").addEventListener("input", () => {
