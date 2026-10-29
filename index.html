@@ -1668,13 +1668,25 @@ function analyzeAudioBuffer(buffer) {
   const channel = buffer.getChannelData(0);
   const step = Math.max(1, Math.floor(buffer.sampleRate * 0.025));
   let sumSquares = 0, peak = 0, quietFrames = 0, frames = 0;
+  let quietStart = null;
+  const quietRegions = [];
   for (let i = 0; i < channel.length; i += step) {
     const sample = channel[i], abs = Math.abs(sample);
     sumSquares += sample * sample; peak = Math.max(peak, abs);
-    if (abs < 0.012) quietFrames++;
+    if (abs < 0.012) {
+      quietFrames++;
+      if (quietStart === null) quietStart = i / buffer.sampleRate;
+    } else if (quietStart !== null) {
+      const end = i / buffer.sampleRate;
+      if (end - quietStart >= 0.25) quietRegions.push({start:quietStart,end:end});
+      quietStart = null;
+    }
     frames++;
   }
-  return {duration:buffer.duration,rms:Math.sqrt(sumSquares/Math.max(1,frames)),peak:peak,quietRatio:quietFrames/Math.max(1,frames)};
+  if (quietStart !== null && buffer.duration - quietStart >= 0.25) {
+    quietRegions.push({start:quietStart,end:buffer.duration});
+  }
+  return {duration:buffer.duration,rms:Math.sqrt(sumSquares/Math.max(1,frames)),peak:peak,quietRatio:quietFrames/Math.max(1,frames),quietRegions:quietRegions};
 }
 let lastAiPlan = "";
 $("analyzeBtn").addEventListener("click", () => {
@@ -1691,6 +1703,14 @@ $("analyzeBtn").addEventListener("click", () => {
     lines.push((index+1) + ". " + track.name);
     lines.push("   長さ " + m.duration.toFixed(2) + "秒 / RMS " + m.rms.toFixed(3) + " / 最大ピーク " + m.peak.toFixed(3) + " / 低音量区間 約" + Math.round(m.quietRatio*100) + "%");
     lines.push("   分類の目安：" + category);
+    const regions = m.quietRegions.filter(region => region.end - region.start >= 0.35);
+    if (regions.length) {
+      lines.push("   無音候補（0.35秒以上・音量しきい値による概算）：" +
+        regions.slice(0, 8).map(region => region.start.toFixed(2) + "–" + region.end.toFixed(2) + "秒").join("、") +
+        (regions.length > 8 ? " ほか" + (regions.length - 8) + "区間" : ""));
+    } else {
+      lines.push("   無音候補：0.35秒以上の区間は検出されませんでした。");
+    }
   });
   lines.push("", "【編集の提案】");
   if (goal === "rhythm") lines.push("- 拍の分割を1/4または1/8に設定し、短い素材でリズムを作る。","- 開始位置を拍グリッドに合わせ、複製で反復を作る。","- 重なりが多い箇所は音量とパンを調整する。");
