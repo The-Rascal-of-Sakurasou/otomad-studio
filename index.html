@@ -285,6 +285,14 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:25px}
             <option value="reverse">逆順に並べる（素材の順番を反転）</option>
           </select>
         </div>
+        <div class="field" style="margin-top:8px">
+          <label for="arrangeScope">配置するトラック</label>
+          <select id="arrangeScope">
+            <option value="all">すべてのトラック</option>
+            <option value="selected">選択中のトラックのみ</option>
+            <option value="group">現在のグループのみ</option>
+          </select>
+        </div>
         <div class="toolbar" style="margin-top:8px"><button id="previewArrangeBtn" class="secondary" disabled>配置案をプレビュー</button><button id="arrangeBtn" class="secondary" disabled>リズム配置案を適用</button></div>
         <div class="field" style="margin-top:10px">
           <label for="repeatSource">拍に合わせて反復する素材</label>
@@ -1359,6 +1367,15 @@ $("repeatTrackBtn").addEventListener("click", () => {
   status("「" + source.name + "」を " + count + " 回、" + interval.toFixed(3) + " 秒間隔で複製しました。Ctrl+Zで取り消せます。");
 });
 
+function getArrangeTargetTracks(scope) {
+  if (scope === "selected") return tracks.filter(track => selectedTrackIds.has(track.id));
+  if (scope === "group") {
+    const group = $("groupFilter").value;
+    return group ? tracks.filter(track => track.group === group) : [];
+  }
+  return tracks.slice();
+}
+
 $("previewArrangeBtn").addEventListener("click", () => {
   if (busy || tracks.length < 2) return;
   const bpm = clamp(Number(bpmInput.value) || 120, 40, 240);
@@ -1366,11 +1383,13 @@ $("previewArrangeBtn").addEventListener("click", () => {
   const division = Math.max(1, Number($("snapDivision").value) || 4);
   const interval = beat / division;
   const mode = $("arrangeMode").value;
+  const targetTracks = getArrangeTargetTracks($("arrangeScope").value);
+  if (targetTracks.length < 2) { status("配置対象のトラックを2つ以上選択してください。"); return; }
   let cursor = 0;
-  const rows = tracks.map((track, index) => {
+  const rows = targetTracks.map((track, index) => {
     let position;
     if (mode === "sequence" || mode === "reverse") {
-      const orderedIndex = mode === "reverse" ? tracks.length - 1 - index : index;
+      const orderedIndex = mode === "reverse" ? targetTracks.length - 1 - index : index;
       if (mode === "reverse") {
         position = null;
       } else {
@@ -1394,7 +1413,7 @@ $("previewArrangeBtn").addEventListener("click", () => {
   const total = Math.max(...rows.map(row => row.position + row.duration));
   const preview = $("arrangePreview");
   preview.hidden = false;
-  preview.textContent = "配置プレビュー（BPM " + bpm + "）\\n" +
+  preview.textContent = "配置プレビュー（BPM " + bpm + "・対象 " + targetTracks.length + " トラック）\\n" +
     rows.map((row, index) => (index + 1) + ". " + row.name + "\\n   開始 " +
       row.position.toFixed(2) + " 秒 / 終了 " + (row.position + row.duration).toFixed(2) + " 秒")
       .join("\\n") + "\\n\\n配置後の総時間：約" + total.toFixed(2) +
@@ -1408,15 +1427,17 @@ $("arrangeBtn").addEventListener("click", () => {
   const division = Math.max(1, Number($("snapDivision").value) || 4);
   const interval = beat / division;
   const mode = $("arrangeMode").value;
+  const targetTracks = getArrangeTargetTracks($("arrangeScope").value);
+  if (targetTracks.length < 2) { status("配置対象のトラックを2つ以上選択してください。"); return; }
   recordHistory();
   let cursor = 0;
   if (mode === "reverse") {
-    [...tracks].reverse().forEach(track => {
+    [...targetTracks].reverse().forEach(track => {
       track.position = Math.ceil((cursor - 0.000001) / interval) * interval;
       cursor = track.position + getTrackOutputDuration(track);
     });
   } else {
-    tracks.forEach((track, index) => {
+    targetTracks.forEach((track, index) => {
       if (mode === "sequence") {
         track.position = Math.ceil((cursor - 0.000001) / interval) * interval;
         cursor = track.position + getTrackOutputDuration(track);
@@ -1431,7 +1452,7 @@ $("arrangeBtn").addEventListener("click", () => {
   renderTracks();
   drawTimeline();
   const modeLabel = mode === "sequence" ? "順番に配置" : mode === "reverse" ? "逆順配置" : mode === "stagger" ? "交互配置" : "細かい刻み";
-  status(modeLabel + "モードでBPM " + bpm + " に合わせて配置しました。Ctrl+Zで元に戻せます。");
+  status(modeLabel + "モードで " + targetTracks.length + " トラックを配置しました。Ctrl+Zで元に戻せます。");
 });
 
 $("seekSlider").addEventListener("input", event => {
