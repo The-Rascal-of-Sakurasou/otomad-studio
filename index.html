@@ -275,7 +275,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:25px}
         <h2>AI制作アシスタント（ローカル解析）</h2>
         <p class="muted">素材の長さ・音量・ピークをブラウザ内で解析し、編集計画のたたき台を作ります。生成AIモデルではなく、外部API接続なしで動く補助機能です。</p>
         <div class="field"><label for="aiGoal">作りたい音MADの方向性</label><select id="aiGoal"><option value="rhythm">リズム重視・細かい刻み</option><option value="voice">セリフ中心・聞き取りやすさ</option><option value="chaos">テンポの速いカオス系</option><option value="music">原曲に合わせた音程・リズム</option></select></div>
-        <div class="toolbar"><button id="analyzeBtn" class="secondary" disabled>素材を解析して編集案を作成</button><button id="copyPlanBtn" class="secondary" disabled>編集案をコピー</button></div>
+        <div class="toolbar"><button id="analyzeBtn" class="secondary" disabled>素材を解析して編集案を作成</button><button id="copyPlanBtn" class="secondary" disabled>編集案をコピー</button><button id="exportAnalysisBtn" class="secondary" disabled>解析データをJSON保存</button></div>
         <div class="field" style="margin-top:8px">
           <label for="arrangeMode">自動配置モード</label>
           <select id="arrangeMode">
@@ -2366,6 +2366,20 @@ function detectTransientCandidates(buffer) {
 }
 
 let lastAiPlan = "";
+let lastAnalysisData = null;
+$("exportAnalysisBtn").addEventListener("click", () => {
+  if (!lastAnalysisData) return;
+  const blob = new Blob([JSON.stringify(lastAnalysisData, null, 2)], {type:"application/json"});
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "otomad-analysis.json";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  status("解析データをJSONで保存しました。音声データは含まれません。");
+});
 $("analyzeBtn").addEventListener("click", () => {
   if (!tracks.length || busy) return;
   const bpm = clamp(Number(bpmInput.value) || 120, 40, 240);
@@ -2414,6 +2428,33 @@ $("analyzeBtn").addEventListener("click", () => {
   else if (goal === "chaos") lines.push("- 短い素材を複製し、1/4拍・1/8拍単位で配置を変える。","- ピッチを変えた複製は音量を控えめに混ぜる。","- 効果音を重ねすぎず、ミックスのピークを確認する。");
   else lines.push("- 基準トラックの拍を確認してからBPMを設定する。","- 素材の開始位置を拍に合わせ、ピッチ変更による長さの変化に注意する。","- 素材のアタックと拍の頭が合っているか再生して確認する。");
   lines.push("", "【注意】","- 音量値だけではセリフ・音楽・効果音を正確に分類できません。","- 編集案は自動適用されません。素材の著作権・利用許諾も確認してください。");
+  lastAnalysisData = {
+    format: "otomad-analysis-v1",
+    generatedAt: new Date().toISOString(),
+    bpm: bpm,
+    bpmSource: $("bpmSource").selectedOptions[0]?.textContent || "",
+    goal: goal,
+    mixDuration: getMixDuration(),
+    note: "ローカルの数値解析による参考データ。意味理解やAI生成結果ではありません。音声本体は含みません。",
+    tracks: tracks.map((track, index) => {
+      const metrics = analyzeAudioBuffer(track.buffer);
+      const transients = detectTransientCandidates(track.buffer)
+        .filter(item => item.time >= track.startTrim && item.time <= track.end)
+        .map(item => ({time: Number(item.time.toFixed(3)), strength: Number(item.strength.toFixed(5))}));
+      return {
+        index: index + 1, name: track.name, duration: Number(track.buffer.duration.toFixed(3)),
+        position: Number(track.position.toFixed(3)), trimStart: Number(track.startTrim.toFixed(3)),
+        trimEnd: Number(track.end.toFixed(3)), pitchSemitones: track.pitch,
+        volume: track.volume, pan: track.pan, muted: track.muted, solo: track.solo, group: track.group,
+        rms: Number(metrics.rms.toFixed(5)), peak: Number(metrics.peak.toFixed(5)),
+        quietRatio: Number(metrics.quietRatio.toFixed(4)),
+        quietRegions: metrics.quietRegions.filter(region => region.end-region.start >= 0.35)
+          .map(region => ({start:Number(region.start.toFixed(3)), end:Number(region.end.toFixed(3))})),
+        transientCandidates: transients
+      };
+    })
+  };
+  $("exportAnalysisBtn").disabled = false;
   lastAiPlan = lines.join("\n");
   $("aiPlan").textContent = lastAiPlan;
   const jumpList = $("quietJumpList");
