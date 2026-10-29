@@ -171,7 +171,7 @@ button:disabled{cursor:not-allowed;opacity:.48}
       <span class="badge">ブラウザ内で処理</span>
     </div>
     <div class="toolbar">
-      <button id="importBtn">＋ 音声を追加</button>
+      <button id="importBtn">＋ 音声・動画を追加</button>
       <button id="playBtn" class="green" disabled title="読み込んだ素材を重ねて再生します">▶ 再生して確認</button>
       <button id="stopBtn" class="secondary" disabled>■ 停止</button>
       <button id="exportBtn" disabled title="編集結果を音声ファイルとして保存します">完成音声を保存（WAV）</button>
@@ -181,10 +181,10 @@ button:disabled{cursor:not-allowed;opacity:.48}
       <button id="undoBtn" class="secondary" disabled>↶ 元に戻す</button>
       <button id="redoBtn" class="secondary" disabled>↷ やり直す</button>
     </div>
-    <input id="fileInput" type="file" accept="audio/*" multiple hidden>
+    <input id="fileInput" type="file" accept="audio/*,video/*,.mp4,.mov,.webm,.m4v,.mkv,.avi" multiple hidden>
     <input id="projectInput" type="file" accept=".json,application/json" hidden>
     <div id="status" class="status" role="status" aria-live="polite">
-      音声ファイルを追加してください。
+      音声または動画ファイルを追加してください。
     </div>
     <details style="margin-top:10px"><summary>使い方・基本操作</summary><ol class="quick-start"><li><strong>音声を追加</strong>して、素材を読み込みます。</li><li><strong>トラック編集</strong>でチェックを入れ、音量・位置・グループを調整します。</li><li><strong>BPM・リズム補助</strong>でテンポを設定し、自動配置や自動刻みを試します。</li><li><strong>ミックス再生</strong>で確認し、必要なら「元に戻す」で調整します。</li><li><strong>WAVを書き出す</strong>と完成音声を保存できます。設定ファイルには音声本体は含まれません。</li></ol><p class="muted">ショートカット：Space＝再生/停止、Ctrl+Z＝元に戻す、Ctrl+YまたはCtrl+Shift+Z＝やり直す、Esc＝停止。</p></details>
   </div>
@@ -275,7 +275,7 @@ button:disabled{cursor:not-allowed;opacity:.48}
         <p class="muted help-box"><strong>グループとは：</strong>素材に「ボイス」「効果音」などの名前を付けて整理する機能です。同じグループをまとめて選択・消音できます。Ctrl+Zで取り消せます。</p>
         <p class="muted">左のチェックを付けた素材に、まとめて操作を適用します。よく分からない場合は、まず1つの素材だけ選んで試してください。多くの操作はCtrl+Zで元に戻せます。</p>
         <div id="trackList">
-          <div class="empty">音声ファイルを追加すると、ここにトラックが表示されます。</div>
+          <div class="empty">音声または動画を追加すると、ここに音声トラックが表示されます。</div>
         </div>
       </section>
     </div>
@@ -729,12 +729,80 @@ function createTrack(name, buffer) {
 
 $("importBtn").addEventListener("click", () => fileInput.click());
 
+// 動画ファイルから音声を取り出し、編集可能な音声トラックとして読み込む。
+async function extractAudioFromVideo(file, ctx) {
+  const video = document.createElement("video");
+  const url = URL.createObjectURL(file);
+  let sourceNode = null;
+  let stream = null;
+  let recorder = null;
+  const chunks = [];
+
+  try {
+    if (!video.captureStream && !video.mozCaptureStream) {
+      throw new Error("このブラウザは動画音声の取り出しに対応していません");
+    }
+    video.preload = "auto";
+    video.playsInline = true;
+    video.muted = false;
+    video.src = url;
+    await new Promise((resolve, reject) => {
+      video.onloadedmetadata = resolve;
+      video.onerror = () => reject(new Error("動画を開けません"));
+      video.load();
+    });
+    if (!video.duration || !Number.isFinite(video.duration)) {
+      throw new Error("動画の長さを取得できません");
+    }
+    sourceNode = ctx.createMediaElementSource(video);
+    const destination = ctx.createMediaStreamDestination();
+    sourceNode.connect(destination);
+    stream = destination.stream;
+    const Recorder = window.MediaRecorder;
+    if (!Recorder) throw new Error("このブラウザは動画音声の取り出しに対応していません");
+    const mime = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"]
+      .find(type => Recorder.isTypeSupported && Recorder.isTypeSupported(type));
+    recorder = mime ? new Recorder(stream, { mimeType: mime }) : new Recorder(stream);
+    const recorded = new Promise((resolve, reject) => {
+      recorder.ondataavailable = event => { if (event.data && event.data.size) chunks.push(event.data); };
+      recorder.onerror = () => reject(new Error("動画の音声を記録できませんでした"));
+      recorder.onstop = async () => {
+        try {
+          if (!chunks.length) throw new Error("動画に音声がないか、音声を取り出せませんでした");
+          const blob = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
+          const buffer = await ctx.decodeAudioData(await blob.arrayBuffer());
+          resolve(buffer);
+        } catch (error) { reject(error); }
+      };
+    });
+    await ctx.resume();
+    recorder.start();
+    await video.play();
+    await new Promise((resolve, reject) => {
+      video.onended = resolve;
+      video.onerror = () => reject(new Error("動画の再生中にエラーが発生しました"));
+    });
+    if (recorder.state !== "inactive") recorder.stop();
+    return await recorded;
+  } finally {
+    if (recorder && recorder.state !== "inactive") {
+      try { recorder.stop(); } catch (_) {}
+    }
+    if (stream) stream.getTracks().forEach(track => track.stop());
+    if (sourceNode) { try { sourceNode.disconnect(); } catch (_) {} }
+    video.pause();
+    video.removeAttribute("src");
+    video.load();
+    URL.revokeObjectURL(url);
+  }
+}
+
 async function loadAudioFiles(fileList) {
   const files = Array.from(fileList || []);
   if (!files.length || busy) return;
 
   setBusy(true);
-  status("音声ファイルを読み込んでいます…");
+  status("音声・動画ファイルを読み込んでいます…");
 
   let success = 0;
   let failed = 0;
@@ -743,9 +811,6 @@ async function loadAudioFiles(fileList) {
     const ctx = await getAudioContext();
 
     for (const file of files) {
-      // iOSの「ファイル」アプリなどでは、音声でも file.type が
-      // application/octet-stream や video/mp4 になることがあるため、
-      // MIMEタイプだけで除外せず、実際にデコードして判定する。
       if (!file.size) {
         failed++;
         console.warn("空のファイルのため読み込めません:", file.name);
@@ -753,13 +818,20 @@ async function loadAudioFiles(fileList) {
       }
 
       try {
-        const data = await file.arrayBuffer();
-        const buffer = await ctx.decodeAudioData(data);
+        let buffer;
+        const isVideo = /^video\//i.test(file.type) ||
+          /\.(mp4|mov|webm|m4v|mkv|avi)$/i.test(file.name);
+        if (isVideo) {
+          status("動画から音声を取り出しています：" + file.name + "（動画の長さ分、時間がかかります）");
+          buffer = await extractAudioFromVideo(file, ctx);
+        } else {
+          buffer = await ctx.decodeAudioData(await file.arrayBuffer());
+        }
         recordHistory();
         tracks.push(createTrack(file.name, buffer));
         success++;
       } catch (error) {
-        console.error("音声の読み込みに失敗:", file.name, error);
+        console.error("メディアの読み込みに失敗:", file.name, error);
         failed++;
       }
     }
@@ -767,12 +839,12 @@ async function loadAudioFiles(fileList) {
     status(
       success
         ? `${success}個の素材を追加しました。` +
-          (failed ? ` 読み込めなかったファイル：${failed}個。音声形式に対応していないか、ファイルが破損している可能性があります。` : "")
-        : "音声を読み込めませんでした。MP3・WAV・M4A形式を試してください。音声ファイルでも読み込めない場合は、別の形式に変換してから再度お試しください。"
+          (failed ? ` 読み込めなかったファイル：${failed}個。動画は音声付きの形式を試してください。` : "")
+        : "読み込めませんでした。音声はMP3・WAV・M4A、動画はMP4・MOV・WebMを試してください。動画は音声部分のみを取り込みます。"
     );
   } catch (error) {
     console.error(error);
-    status("音声の読み込みを開始できませんでした。ページを再読み込みし、もう一度お試しください。");
+    status("メディアの読み込みを開始できませんでした。ページを再読み込みし、もう一度お試しください。");
   } finally {
     fileInput.value = "";
     setBusy(false);
