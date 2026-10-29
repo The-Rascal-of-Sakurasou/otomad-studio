@@ -2314,11 +2314,15 @@ function analyzeAudioBuffer(buffer) {
   const channel = buffer.getChannelData(0);
   const step = Math.max(1, Math.floor(buffer.sampleRate * 0.025));
   let sumSquares = 0, peak = 0, quietFrames = 0, frames = 0;
+  let crossings = 0, crossingPairs = 0, leftEnergy = 0, rightEnergy = 0;
   let quietStart = null;
   const quietRegions = [];
+  const right = buffer.numberOfChannels > 1 ? buffer.getChannelData(1) : null;
   for (let i = 0; i < channel.length; i += step) {
     const sample = channel[i], abs = Math.abs(sample);
     sumSquares += sample * sample; peak = Math.max(peak, abs);
+    if (right) { leftEnergy += sample * sample; rightEnergy += right[i] * right[i]; }
+    if (i > 0) { crossings += ((channel[i] >= 0) !== (channel[i-step] >= 0)) ? 1 : 0; crossingPairs++; }
     if (abs < 0.012) {
       quietFrames++;
       if (quietStart === null) quietStart = i / buffer.sampleRate;
@@ -2332,7 +2336,7 @@ function analyzeAudioBuffer(buffer) {
   if (quietStart !== null && buffer.duration - quietStart >= 0.25) {
     quietRegions.push({start:quietStart,end:buffer.duration});
   }
-  return {duration:buffer.duration,rms:Math.sqrt(sumSquares/Math.max(1,frames)),peak:peak,quietRatio:quietFrames/Math.max(1,frames),quietRegions:quietRegions};
+  return {duration:buffer.duration,rms:Math.sqrt(sumSquares/Math.max(1,frames)),peak:peak,quietRatio:quietFrames/Math.max(1,frames),zeroCrossingRate:crossings/Math.max(1,crossingPairs),stereoBalance:right?((Math.sqrt(rightEnergy)-Math.sqrt(leftEnergy))/(Math.sqrt(rightEnergy)+Math.sqrt(leftEnergy)+1e-9)):null,quietRegions:quietRegions};
 }
 function detectTransientCandidates(buffer) {
   const step = Math.max(1, Math.floor(buffer.sampleRate * 0.02));
@@ -2401,6 +2405,7 @@ $("analyzeBtn").addEventListener("click", () => {
     const category = m.duration < 1.2 ? "短い素材・刻み向き" : m.duration > 8 ? "長めの素材・背景/セリフ向き" : "中程度の素材";
     lines.push((index+1) + ". " + track.name);
     lines.push("   長さ " + m.duration.toFixed(2) + "秒 / RMS " + m.rms.toFixed(3) + " / 最大ピーク " + m.peak.toFixed(3) + " / 低音量区間 約" + Math.round(m.quietRatio*100) + "%");
+    lines.push("   音色の粗い指標：ゼロ交差率 " + m.zeroCrossingRate.toFixed(3) + (m.stereoBalance === null ? " / モノラル素材" : " / 左右バランス " + (m.stereoBalance > 0.08 ? "右寄り" : m.stereoBalance < -0.08 ? "左寄り" : "中央付近")));
     lines.push("   分類の目安：" + category);
     const regions = m.quietRegions
       .filter(region => region.end - region.start >= 0.35 &&
@@ -2447,6 +2452,8 @@ $("analyzeBtn").addEventListener("click", () => {
         trimEnd: Number(track.end.toFixed(3)), pitchSemitones: track.pitch,
         volume: track.volume, pan: track.pan, muted: track.muted, solo: track.solo, group: track.group,
         rms: Number(metrics.rms.toFixed(5)), peak: Number(metrics.peak.toFixed(5)),
+        zeroCrossingRate: Number(metrics.zeroCrossingRate.toFixed(5)),
+        stereoBalance: metrics.stereoBalance === null ? null : Number(metrics.stereoBalance.toFixed(5)),
         quietRatio: Number(metrics.quietRatio.toFixed(4)),
         quietRegions: metrics.quietRegions.filter(region => region.end-region.start >= 0.35)
           .map(region => ({start:Number(region.start.toFixed(3)), end:Number(region.end.toFixed(3))})),
