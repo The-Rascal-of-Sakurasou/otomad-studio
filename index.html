@@ -210,6 +210,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:25px}
         <div class="field"><label for="aiGoal">作りたい音MADの方向性</label><select id="aiGoal"><option value="rhythm">リズム重視・細かい刻み</option><option value="voice">セリフ中心・聞き取りやすさ</option><option value="chaos">テンポの速いカオス系</option><option value="music">原曲に合わせた音程・リズム</option></select></div>
         <div class="toolbar"><button id="analyzeBtn" class="secondary" disabled>素材を解析して編集案を作成</button><button id="copyPlanBtn" class="secondary" disabled>編集案をコピー</button></div>
         <pre id="aiPlan" class="ai-plan" aria-live="polite">音声素材を追加すると、解析して編集案を作成できます。</pre>
+        <div id="quietJumpList" class="toolbar" aria-label="無音候補への移動" style="margin-top:10px"></div>
       </section>
       <section class="panel">
         <h2>編集情報</h2>
@@ -1697,6 +1698,7 @@ $("analyzeBtn").addEventListener("click", () => {
     "※ブラウザ内の数値解析に基づく提案です。生成AIによる意味理解や自動編集ではありません。", "",
     "プロジェクト：" + tracks.length + "トラック / BPM " + bpm + " / 1拍 " + beat.toFixed(3) + "秒",
     "ミックス予定時間：約" + getMixDuration().toFixed(2) + "秒", "", "【素材の解析】"];
+  const quietJumps = [];
   tracks.forEach((track,index) => {
     const m = analyzeAudioBuffer(track.buffer);
     const category = m.duration < 1.2 ? "短い素材・刻み向き" : m.duration > 8 ? "長めの素材・背景/セリフ向き" : "中程度の素材";
@@ -1708,6 +1710,10 @@ $("analyzeBtn").addEventListener("click", () => {
       lines.push("   無音候補（0.35秒以上・音量しきい値による概算）：" +
         regions.slice(0, 8).map(region => region.start.toFixed(2) + "–" + region.end.toFixed(2) + "秒").join("、") +
         (regions.length > 8 ? " ほか" + (regions.length - 8) + "区間" : ""));
+      regions.slice(0, 8).forEach(region => quietJumps.push({
+        label: track.name + "：" + region.start.toFixed(2) + "–" + region.end.toFixed(2) + "秒",
+        time: track.position + region.start / Math.pow(2, track.pitch / 12)
+      }));
     } else {
       lines.push("   無音候補：0.35秒以上の区間は検出されませんでした。");
     }
@@ -1720,6 +1726,28 @@ $("analyzeBtn").addEventListener("click", () => {
   lines.push("", "【注意】","- 音量値だけではセリフ・音楽・効果音を正確に分類できません。","- 編集案は自動適用されません。素材の著作権・利用許諾も確認してください。");
   lastAiPlan = lines.join("\n");
   $("aiPlan").textContent = lastAiPlan;
+  const jumpList = $("quietJumpList");
+  jumpList.replaceChildren();
+  quietJumps.slice(0, 30).forEach(item => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "secondary";
+    button.textContent = "移動：" + item.label;
+    button.addEventListener("click", () => {
+      seekOffset = clamp(item.time, 0, getMixDuration());
+      $("seekSlider").value = String(seekOffset);
+      $("seekLabel").textContent = seekOffset.toFixed(2) + " 秒";
+      drawTimeline();
+      status("無音候補の位置 " + seekOffset.toFixed(2) + " 秒に移動しました。");
+    });
+    jumpList.append(button);
+  });
+  if (!quietJumps.length) {
+    const note = document.createElement("span");
+    note.className = "muted";
+    note.textContent = "移動できる無音候補はありません。";
+    jumpList.append(note);
+  }
   $("copyPlanBtn").disabled = false;
   status("素材の数値解析と編集案の作成が完了しました。");
 });
