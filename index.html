@@ -321,6 +321,8 @@ button:disabled{cursor:not-allowed;opacity:.48}
           </select>
         </div>
         <div class="toolbar" style="margin-top:8px"><button id="previewArrangeBtn" class="secondary" disabled>配置案をプレビュー</button><button id="arrangeBtn" class="secondary" disabled>リズム配置案を適用</button></div>
+        <div class="toolbar" style="margin-top:8px"><button id="onsetFromAnalysisBtn" class="secondary" type="button" disabled>解析を使って立ち上がり同期を設定</button></div>
+        <p class="muted">解析結果から立ち上がり同期モードを設定し、配置案のプレビューを開きます。実際の配置変更は適用ボタンを押すまで行いません。</p>
         <div class="field" style="margin-top:10px">
           <label for="repeatSource">拍に合わせて反復する素材</label>
           <select id="repeatSource" aria-label="反復するトラック"></select>
@@ -616,6 +618,7 @@ function updateButtons() {
   $("detectBpmBtn").disabled = busy || !hasTracks;
   $("analyzeBtn").disabled = busy || !hasTracks;
   $("arrangeBtn").disabled = busy || tracks.length < 2;
+  $("onsetFromAnalysisBtn").disabled = busy || tracks.length < 2;
   $("previewArrangeBtn").disabled = busy || tracks.length < 2;
   $("importBtn").disabled = busy;
   $("stopBtn").disabled = playbackSources.length === 0;
@@ -1547,6 +1550,15 @@ $("previewArrangeBtn").addEventListener("click", () => {
       row.position.toFixed(2) + " 秒 / 終了 " + (row.position + row.duration).toFixed(2) + " 秒")
       .join("\\n") + "\\n\\n配置後の総時間：約" + total.toFixed(2) +
       " 秒\\n※対象外のトラックは現在の位置を維持して総時間に含めます。\\n※プレビューのみです。適用するまでトラック位置は変わりません。";
+});
+
+$("onsetFromAnalysisBtn").addEventListener("click", () => {
+  if (busy || tracks.length < 2) return;
+  $("arrangeMode").value = "onset";
+  $("arrangeScope").value = selectedTrackIds.size >= 2 ? "selected" : "all";
+  $("previewArrangeBtn").click();
+  $("arrangePreview").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  status("解析で検出した音の立ち上がりを使う配置案を表示しました。内容を確認してから適用してください。");
 });
 
 $("arrangeBtn").addEventListener("click", () => {
