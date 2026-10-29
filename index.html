@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#101014">
+  <title>Otomad AI - Audio Studio</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #101014;
+      --panel: #1b1b23;
+      --accent: #a78bfa;
+      --text: #f5f5f7;
+      --muted: #a1a1aa;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, sans-serif;
+    }
+
+    header {
+      padding: 24px;
+      border-bottom: 1px solid #30303a;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 26px;
+    }
+
+    h1 span { color: var(--accent); }
+
+    header p {
+      color: var(--muted);
+      margin-bottom: 0;
+    }
+
+    main {
+      max-width: 900px;
+      margin: auto;
+      padding: 24px 16px;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid #30303a;
+      border-radius: 16px;
+      padding: 22px;
+      margin-bottom: 18px;
+    }
+
+    h2 {
+      margin-top: 0;
+      font-size: 19px;
+    }
+
+    button, .file-label {
+      background: var(--accent);
+      color: #171221;
+      border: none;
+      padding: 11px 16px;
+      border-radius: 9px;
+      font-weight: 700;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    button:disabled {
+      opacity: .4;
+      cursor: not-allowed;
+    }
+
+    button.secondary {
+      background: #353541;
+      color: white;
+    }
+
+    input[type="file"] {
+      display: block;
+      max-width: 100%;
+      margin: 16px 0;
+    }
+
+    audio {
+      width: 100%;
+      margin: 12px 0;
+    }
+
+    .control { margin: 22px 0; }
+
+    .control label {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--accent);
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    #status {
+      color: var(--muted);
+      overflow-wrap: anywhere;
+      line-height: 1.7;
+    }
+
+    .note {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    footer {
+      text-align: center;
+      padding: 24px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1><span>Otomad</span> AI</h1>
+    <p>AI-powered audio creation studio</p>
+  </header>
+
+  <main>
+    <section class="panel">
+      <h2>01 / 音声素材</h2>
+      <p>加工したい音声ファイルを選択してください。</p>
+      <input id="fileInput" type="file" accept="audio/*">
+      <p id="fileInfo">音声ファイルが選択されていません。</p>
+      <audio id="player" controls hidden></audio>
+      <p id="status" role="status">準備完了</p>
+    </section>
+
+    <section class="panel">
+      <h2>02 / 音声加工</h2>
+
+      <div class="control">
+        <label for="speed">
+          <span>再生速度</span>
+          <strong id="speedValue">1.00x</strong>
+        </label>
+        <input id="speed" type="range"
+          min="0.5" max="2" step="0.05" value="1">
+      </div>
+
+      <div class="control">
+        <label for="pitch">
+          <span>音程</span>
+          <strong id="pitchValue">±0 半音</strong>
+        </label>
+        <input id="pitch" type="range"
+          min="-12" max="12" step="1" value="0">
+      </div>
+
+      <p class="note">
+        ※ この試作版では、音程を変更すると再生速度と音声の長さも変わります。
+        音程を保ったまま速度だけを変える機能は、今後の開発で追加します。
+      </p>
+
+      <div class="actions">
+        <button id="playButton" disabled>加工した音声を再生</button>
+        <button id="stopButton" class="secondary" disabled>停止</button>
+        <button id="exportButton" disabled>WAVを書き出す</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>03 / 今後追加する機能</h2>
+      <ul>
+        <li>複数の音声素材を組み合わせる編集機能</li>
+        <li>リズムの自動解析</li>
+        <li>音声素材の自動配置</li>
+        <li>AIによる音MADの自動生成</li>
+      </ul>
+      <p class="note">
+        これらは今後実装する予定の機能であり、現時点では未実装です。
+      </p>
+    </section>
+  </main>
+
+  <footer>Otomad AI · Audio Creation Studio</footer>
+
+  <script>
+    const fileInput = document.getElementById("fileInput");
+    const player = document.getElementById("player");
+    const fileInfo = document.getElementById("fileInfo");
+    const status = document.getElementById("status");
+
+    const speedInput = document.getElementById("speed");
+    const pitchInput = document.getElementById("pitch");
+    const speedValue = document.getElementById("speedValue");
+    const pitchValue = document.getElementById("pitchValue");
+
+    const playButton = document.getElementById("playButton");
+    const stopButton = document.getElementById("stopButton");
+    const exportButton = document.getElementById("exportButton");
+
+    let audioContext = null;
+    let audioBuffer = null;
+    let source = null;
+    let sourceUrl = null;
+    let generation = 0;
+
+    function effectiveRate() {
+      const speed = Number(speedInput.value);
+      const semitones = Number(pitchInput.value);
+      return speed * Math.pow(2, semitones / 12);
+    }
+
+    function updateControls() {
+      speedValue.textContent =
+        Number(speedInput.value).toFixed(2) + "x";
+
+      const pitch = Number(pitchInput.value);
+      pitchValue.textContent =
+        (pitch > 0 ? "+" : "") + pitch + " 半音";
+    }
+
+    function stopAudio() {
+      generation++;
+
+      if (source) {
+        try { source.stop(); } catch (_) {}
+        try { source.disconnect(); } catch (_) {}
+        source = null;
+      }
+
+      if (audioContext &&
+          audioContext.state === "running") {
+        // Context is retained for reuse.
+      }
+
+      stopButton.disabled = true;
+    }
+
+    async function ensureContext() {
+      if (!audioContext ||
+          audioContext.state === "closed") {
+        audioContext = new AudioContext();
+      }
+
+      if (audioContext.state === "suspended") {
+        await audioContext.resume();
+      }
+
+      return audioContext;
+    }
+
+    fileInput.addEventListener("change", async () => {
+      const file = fileInput.files[0];
+      if (!file) return;
+
+      stopAudio();
+      audioBuffer = null;
+
+      playButton.disabled = true;
+      exportButton.disabled = true;
+      status.textContent = "音声を読み込んでいます…";
+
+      if (sourceUrl) URL.revokeObjectURL(sourceUrl);
+      sourceUrl = URL.createObjectURL(file);
+
+      player.src = sourceUrl;
+      player.hidden = false;
+
+      try {
+        const context = await ensureContext();
+        const arrayBuffer = await file.arrayBuffer();
+        audioBuffer = await context.decodeAudioData(arrayBuffer);
+
+        fileInfo.textContent =
+          `${file.name} / ${audioBuffer.duration.toFixed(2)}秒 / ` +
+          `${audioBuffer.numberOfChannels}ch`;
+
+        playButton.disabled = false;
+        exportButton.disabled = false;
+        status.textContent = "読み込み完了。加工できます。";
+      } catch (error) {
+        status.textContent =
+          "読み込みに失敗しました。別の音声ファイルを試してください。";
+        console.error(error);
+      }
+    });
+
+    speedInput.addEventListener("input", updateControls);
+    pitchInput.addEventListener("input", updateControls);
+
+    playButton.addEventListener("click", async () => {
+      if (!audioBuffer) return;
+
+      stopAudio();
+      const currentGeneration = generation;
+
+      try {
+        const context = await ensureContext();
+
+        if (currentGeneration !== generation) return;
+
+        source = context.createBufferSource();
+        source.buffer = audioBuffer;
+        source.playbackRate.value = effectiveRate();
+        source.connect(context.destination);
+
+        source.onended = () => {
+          if (currentGeneration === generation) {
+            source = null;
+            stopButton.disabled = true;
+            status.textContent = "再生終了";
+          }
+        };
+
+        source.start();
+        stopButton.disabled = false;
+        status.textContent = "加工した音声を再生中…";
+      } catch (error) {
+        status.textContent = "再生に失敗しました。";
+        console.error(error);
+      }
+    });
+
+    stopButton.addEventListener("click", () => {
+      stopAudio();
+      status.textContent = "停止しました。";
+    });
+
+    exportButton.addEventListener("click", async () => {
+      if (!audioBuffer) return;
+
+      stopAudio();
+      exportButton.disabled = true;
+      status.textContent = "WAVファイルを作成しています…";
+
+      try {
+        const rate = effectiveRate();
+        const outputLength = Math.ceil(
+          audioBuffer.length / rate
+        );
+
+        const offline = new OfflineAudioContext(
+          audioBuffer.numberOfChannels,
+          outputLength,
+          audioBuffer.sampleRate
+        );
+
+        const offlineSource = offline.createBufferSource();
+        offlineSource.buffer = audioBuffer;
+        offlineSource.playbackRate.value = rate;
+        offlineSource.connect(offline.destination);
+        offlineSource.start();
+
+        const rendered = await offline.startRendering();
+        const wav = encodeWav(rendered);
+        const blob = new Blob([wav], { type: "audio/wav" });
+        const url = URL.createObjectURL(blob);
+
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "otomad-ai.wav";
+        link.click();
+
+        setTimeout(() => URL.revokeObjectURL(url), 30000);
+        status.textContent = "WAVを書き出しました。";
+      } catch (error) {
+        status.textContent =
+          "書き出しに失敗しました。ファイルの長さを確認してください。";
+        console.error(error);
+      } finally {
+        exportButton.disabled = false;
+      }
+    });
+
+    function encodeWav(buffer) {
+      const channels = buffer.numberOfChannels;
+      const sampleRate = buffer.sampleRate;
+      const frames = buffer.length;
+      const bytesPerSample = 2;
+      const blockAlign = channels * bytesPerSample;
+      const dataSize = frames * blockAlign;
+
+      const array = new ArrayBuffer(44 + dataSize);
+      const view = new DataView(array);
+
+      function writeString(offset, string) {
+        for (let i = 0; i < string.length; i++) {
+          view.setUint8(offset + i, string.charCodeAt(i));
+        }
+      }
+
+      writeString(0, "RIFF");
+      view.setUint32(4, 36 + dataSize, true);
+      writeString(8, "WAVE");
+      writeString(12, "fmt ");
+      view.setUint32(16, 16, true);
+      view.setUint16(20, 1, true);
+      view.setUint16(22, channels, true);
+      view.setUint32(24, sampleRate, true);
+      view.setUint32(28, sampleRate * blockAlign, true);
+      view.setUint16(32, blockAlign, true);
+      view.setUint16(34, 16, true);
+      writeString(36, "data");
+      view.setUint32(40, dataSize, true);
+
+      let offset = 44;
+
+      for (let i = 0; i < frames; i++) {
+        for (let channel = 0; channel < channels; channel++) {
+          let sample = buffer.getChannelData(channel)[i];
+
+          sample = Math.max(-1, Math.min(1, sample));
+
+          const integer = sample < 0
+            ? sample * 32768
+            : sample * 32767;
+
+          view.setInt16(offset, integer, true);
+          offset += 2;
+        }
+      }
+
+      return array;
+    }
+
+    window.addEventListener("beforeunload", () => {
+      if (sourceUrl) URL.revokeObjectURL(sourceUrl);
+      if (audioContext && audioContext.state !== "closed") {
+        audioContext.close();
+      }
+    });
+
+    updateControls();
+  </script>
+</body>
+</html>
