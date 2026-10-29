@@ -57,6 +57,7 @@ border-radius:10px;padding:13px;min-width:0}
 .track.dragging{opacity:.45}
 .track.drop-target{border-color:var(--accent)}
 .track-head{display:flex;align-items:center;gap:9px;margin-bottom:10px}
+.track-select{width:18px;height:18px;flex:none}.track-head .track-select-label{display:flex;align-items:center;gap:5px;color:var(--muted);font-size:11px;flex:none}
 .track-name{font-weight:750;overflow-wrap:anywhere;flex:1;min-width:0}
 .track-number{color:var(--accent);font-size:12px}
 .wave-wrap{position:relative;width:100%;margin:8px 0 12px}
@@ -153,6 +154,14 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:25px}
           <h2>トラック編集</h2>
           <span id="trackCount" class="stat">0 tracks</span>
         </div>
+        <div class="toolbar" aria-label="複数トラック操作">
+          <button id="selectAllTracksBtn" class="secondary" type="button" disabled>全選択</button>
+          <button id="clearTrackSelectionBtn" class="secondary" type="button" disabled>選択解除</button>
+          <button id="bulkMuteBtn" class="secondary" type="button" disabled>選択をミュート</button>
+          <button id="bulkSoloBtn" class="secondary" type="button" disabled>選択をソロ</button>
+          <button id="bulkDeleteBtn" class="danger" type="button" disabled>選択を削除</button>
+        </div>
+        <p class="muted">チェックしたトラックにまとめて操作できます。削除は取り消し可能です。</p>
         <div id="trackList">
           <div class="empty">音声ファイルを追加すると、ここにトラックが表示されます。</div>
         </div>
@@ -323,6 +332,8 @@ let playbackOffset = 0;
 let seekOffset = 0;
 
 
+const selectedTrackIds = new Set();
+
 const undoStack = [];
 const redoStack = [];
 const HISTORY_LIMIT = 80;
@@ -449,6 +460,18 @@ function updateBpmSourceOptions() {
 
 function updateButtons() {
   const hasTracks = tracks.length > 0;
+  for (const id of Array.from(selectedTrackIds)) {
+    if (!tracks.some(track => track.id === id)) selectedTrackIds.delete(id);
+  }
+  const selectedCount = selectedTrackIds.size;
+  $("selectAllTracksBtn").disabled = busy || !hasTracks || selectedCount === tracks.length;
+  $("clearTrackSelectionBtn").disabled = busy || selectedCount === 0;
+  $("bulkMuteBtn").disabled = busy || selectedCount === 0;
+  $("bulkSoloBtn").disabled = busy || selectedCount === 0;
+  $("bulkDeleteBtn").disabled = busy || selectedCount === 0;
+  $("bulkMuteBtn").textContent = selectedCount > 0 && tracks.filter(t => selectedTrackIds.has(t.id)).every(t => t.muted) ? "選択のミュート解除" : "選択をミュート";
+  $("bulkSoloBtn").textContent = selectedCount > 0 && tracks.filter(t => selectedTrackIds.has(t.id)).every(t => t.solo) ? "選択のソロ解除" : "選択をソロ";
+  $("trackCount").textContent = tracks.length + " tracks / 選択 " + selectedCount;
   $("sliceTrackBtn").disabled = busy || !hasTracks;
   updateBpmSourceOptions();
   updateRepeatSourceOptions();
@@ -891,6 +914,22 @@ function renderTracks() {
     number.className = "track-number";
     number.textContent = String(index + 1).padStart(2, "0");
 
+    const selectLabel = document.createElement("label");
+    selectLabel.className = "track-select-label";
+    selectLabel.title = "一括操作の対象にする";
+    const selectBox = document.createElement("input");
+    selectBox.type = "checkbox";
+    selectBox.className = "track-select";
+    selectBox.checked = selectedTrackIds.has(track.id);
+    selectBox.disabled = busy;
+    selectBox.setAttribute("aria-label", track.name + "を選択");
+    selectBox.addEventListener("change", () => {
+      if (selectBox.checked) selectedTrackIds.add(track.id);
+      else selectedTrackIds.delete(track.id);
+      updateButtons();
+    });
+    selectLabel.append(selectBox);
+
     const name = document.createElement("div");
     name.className = "track-name";
     name.textContent = track.name;
@@ -953,7 +992,7 @@ function renderTracks() {
       status("トラックを削除しました。");
     });
 
-    head.append(number, name, duplicate, split, remove);
+    head.append(number, selectLabel, name, duplicate, split, remove);
 
     const canvas = document.createElement("canvas");
     canvas.className = "wave";
@@ -1903,6 +1942,51 @@ projectInput.addEventListener("change", async () => {
   } finally {
     projectInput.value = "";
   }
+});
+
+$("selectAllTracksBtn").addEventListener("click", () => {
+  if (busy) return;
+  tracks.forEach(track => selectedTrackIds.add(track.id));
+  renderTracks();
+  status("すべてのトラックを選択しました。");
+});
+$("clearTrackSelectionBtn").addEventListener("click", () => {
+  if (busy) return;
+  selectedTrackIds.clear();
+  renderTracks();
+  status("トラックの選択を解除しました。");
+});
+$("bulkMuteBtn").addEventListener("click", () => {
+  if (busy || !selectedTrackIds.size) return;
+  const selected = tracks.filter(track => selectedTrackIds.has(track.id));
+  const nextMuted = !selected.every(track => track.muted);
+  recordHistory();
+  stopPlayback();
+  selected.forEach(track => { track.muted = nextMuted; });
+  renderTracks();
+  status(nextMuted ? selected.length + "個のトラックをミュートしました。" : selected.length + "個のトラックのミュートを解除しました。");
+});
+$("bulkSoloBtn").addEventListener("click", () => {
+  if (busy || !selectedTrackIds.size) return;
+  const selected = tracks.filter(track => selectedTrackIds.has(track.id));
+  const nextSolo = !selected.every(track => track.solo);
+  recordHistory();
+  stopPlayback();
+  selected.forEach(track => { track.solo = nextSolo; });
+  renderTracks();
+  status(nextSolo ? selected.length + "個のトラックをソロにしました。" : selected.length + "個のトラックのソロを解除しました。");
+});
+$("bulkDeleteBtn").addEventListener("click", () => {
+  if (busy || !selectedTrackIds.size) return;
+  const count = selectedTrackIds.size;
+  if (!confirm("選択した" + count + "個のトラックを削除しますか？")) return;
+  recordHistory();
+  stopPlayback();
+  tracks = tracks.filter(track => !selectedTrackIds.has(track.id));
+  selectedTrackIds.clear();
+  renderTracks();
+  drawTimeline();
+  status(count + "個のトラックを削除しました。Ctrl+Zで元に戻せます。");
 });
 
 $("clearBtn").addEventListener("click", () => {
