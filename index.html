@@ -299,7 +299,7 @@ button:disabled{cursor:not-allowed;opacity:.48}
         <h2>制作アシスタント（ローカル解析）</h2>
         <p class="muted">素材の長さ・音量・ピークをブラウザ内で解析し、編集計画のたたき台を作ります。生成AIモデルではなく、外部API接続なしで動く補助機能です。</p>
         <div class="field"><label for="aiGoal">作りたい音MADの方向性</label><select id="aiGoal"><option value="rhythm">リズム重視・細かい刻み</option><option value="voice">セリフ中心・聞き取りやすさ</option><option value="chaos">テンポの速いカオス系</option><option value="music">原曲に合わせた音程・リズム</option></select></div>
-        <div class="toolbar"><button id="analyzeBtn" class="secondary" disabled>素材を解析して編集案を作成</button><button id="copyPlanBtn" class="secondary" disabled>編集案をコピー</button><button id="exportAnalysisBtn" class="secondary" disabled>解析データをJSON保存</button><button id="autoGainBtn" class="secondary" disabled>選択素材の音量を自動調整</button><button id="trimSilenceBtn" class="secondary" disabled>選択素材の前後の無音をカット</button></div>
+        <div class="toolbar"><button id="analyzeBtn" class="secondary" disabled>素材を解析して編集案を作成</button><button id="copyPlanBtn" class="secondary" disabled>編集案をコピー</button><button id="exportAnalysisBtn" class="secondary" disabled>解析データをJSON保存</button><button id="autoGainBtn" class="secondary" disabled>選択素材の音量を自動調整</button><button id="trimSilenceBtn" class="secondary" disabled>選択素材の前後の無音をカット</button><button id="prepareSelectedBtn" class="primary" disabled>選択素材をまとめて整える</button></div>
         <div class="field" style="margin-top:8px">
           <label for="arrangeMode">自動配置モード</label>
           <select id="arrangeMode">
@@ -595,6 +595,7 @@ function updateButtons() {
   $("bulkAlignBtn").disabled = busy || selectedCount === 0;
   $("groupName").disabled = busy || selectedCount === 0;
   $("groupAssignBtn").disabled = busy || selectedCount === 0;
+  $("prepareSelectedBtn").disabled = busy || selectedCount === 0;
   updateGroupFilterOptions();
   $("bulkMuteBtn").textContent = selectedCount > 0 && tracks.filter(t => selectedTrackIds.has(t.id)).every(t => t.muted) ? "選択のミュート解除" : "選択をミュート";
   $("bulkSoloBtn").textContent = selectedCount > 0 && tracks.filter(t => selectedTrackIds.has(t.id)).every(t => t.solo) ? "選択のソロ解除" : "選択をソロ";
@@ -2517,6 +2518,44 @@ $("trimSilenceBtn").addEventListener("click", () => {
   drawTimeline();
   status("前後の低音量区間をトリミングしました（" + changes.length + "件）。" + (skipped ? "変更なし " + skipped + "件。" : "") + " Ctrl+Zで元に戻せます。");
 });
+$("prepareSelectedBtn").addEventListener("click", () => {
+  if (busy) return;
+  const targets = tracks.filter(track => selectedTrackIds.has(track.id));
+  if (!targets.length) {
+    status("先に整えたいトラックを選択してください。");
+    return;
+  }
+  const plans = targets.map(track => {
+    const metrics = analyzeAudioBuffer(track.buffer);
+    const regions = metrics.quietRegions.filter(region => region.end - region.start >= 0.25);
+    let startTrim = track.startTrim, end = track.end;
+    const leading = regions.find(region => region.start <= track.startTrim + 0.05 && region.end > track.startTrim + 0.25);
+    if (leading) startTrim = Math.min(track.end, Math.max(startTrim, leading.end - 0.04));
+    const trailing = [...regions].reverse().find(region => region.end >= track.end - 0.05 && region.start < track.end - 0.25);
+    if (trailing) end = Math.max(startTrim, Math.min(end, trailing.start + 0.04));
+    if (end - startTrim < 0.1) { startTrim = track.startTrim; end = track.end; }
+    const volume = metrics.peak < 0.0001 ? track.volume : clamp(track.volume * (0.75 / metrics.peak), 0, 2);
+    return {track, startTrim, end, volume, peak: metrics.peak};
+  });
+  const changed = plans.filter(p => Math.abs(p.startTrim-p.track.startTrim) > 0.01 || Math.abs(p.end-p.track.end) > 0.01 || Math.abs(p.volume-p.track.volume) > 0.001);
+  if (!changed.length) {
+    status("選択素材に自動調整できる変更はありませんでした。");
+    return;
+  }
+  recordHistory();
+  stopPlayback();
+  changed.forEach(p => {
+    p.track.startTrim = p.startTrim;
+    p.track.end = Math.max(p.startTrim + 0.1, p.end);
+    p.track.fadeIn = Math.min(p.track.fadeIn, getTrackDuration(p.track));
+    p.track.fadeOut = Math.min(p.track.fadeOut, getTrackDuration(p.track));
+    if (p.peak >= 0.0001) p.track.volume = p.volume;
+  });
+  renderTracks();
+  drawTimeline();
+  status("選択素材 " + changed.length + "件をまとめて調整しました（前後の低音量区間のトリミング＋ピーク基準の音量調整）。Ctrl+Zでまとめて元に戻せます。自動判定は目安なので、必ず再生して確認してください。");
+});
+
 $("autoGainBtn").addEventListener("click", () => {
   if (busy) return;
   const targets = tracks.filter(track => selectedTrackIds.has(track.id));
