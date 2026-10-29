@@ -311,7 +311,7 @@ button:disabled{cursor:not-allowed;opacity:.48}
         <div class="field" style="margin-top:10px">
           <label for="generationPrompt">プロンプト（作りたい音MADを文章で指定）</label>
           <textarea id="generationPrompt" rows="3" maxlength="500" placeholder="例：BPM 150で、セリフ中心。細かく刻んでテンポの速いカオス系にする"></textarea>
-          <p class="muted">文章から対応キーワード・BPM・拍の分割を読み取り、配置パターンに反映します。意味の完全な理解や、音声内容の自動認識には対応していません。</p>
+          <p class="muted">対応キーワード・BPM・拍の分割・音程・左右パンを読み取り、配置に反映します。例：「BPM 150、16分刻み、左右交互、セリフ中心」。文章の完全な意味理解や音声内容の自動認識には対応していません。</p>
           <div class="toolbar"><button id="clearPromptBtn" class="secondary" type="button">プロンプトを消去</button><button id="applyPromptBtn" class="secondary" type="button">指示を設定に反映</button></div>
         </div>
         <div class="toolbar"><button id="autoGenerateBtn" class="green" disabled>プロンプトで音MADを生成</button><button id="analyzeBtn" class="secondary" disabled>素材を解析して編集案を作成</button><button id="copyPlanBtn" class="secondary" disabled>編集案をコピー</button><button id="exportAnalysisBtn" class="secondary" disabled>解析データをJSON保存</button><button id="autoGainBtn" class="secondary" disabled>選択素材の音量を自動調整</button><button id="trimSilenceBtn" class="secondary" disabled>選択素材の前後の無音をカット</button><button id="prepareSelectedBtn" class="primary" disabled>選択素材をまとめて整える</button></div>
@@ -2606,7 +2606,7 @@ let lastAiPlan = "";
 // プロンプトはブラウザ内で解釈できる設定語に変換する。外部AI APIは使用しない。
 function parseGenerationPrompt(rawPrompt) {
   const prompt = String(rawPrompt || "").trim().toLowerCase();
-  const profile = { goal: null, bpm: null, division: null, density: null, pitchShift: 0, notes: [] };
+  const profile = { goal: null, bpm: null, division: null, density: null, pitchShift: 0, panMode: null, notes: [] };
   if (!prompt) return profile;
   if (/カオス|カオス系|高速|速い|ハイスピード|chaos/.test(prompt)) {
     profile.goal = "chaos"; profile.notes.push("カオス系");
@@ -2625,15 +2625,26 @@ function parseGenerationPrompt(rawPrompt) {
       profile.notes.push("BPM " + requestedBpm);
     }
   }
-  const divisionMatch = prompt.match(/(?:1\s*\/\s*(2|4|8)\s*拍|1\s*\/\s*(2|4|8)\s*刻み|(?:半拍|8分刻み|16分刻み))/);
+  const divisionMatch = prompt.match(/(?:1\s*\/\s*(2|4|8)\s*拍|1\s*\/\s*(2|4|8)\s*刻み)/);
   if (divisionMatch) {
-    profile.division = divisionMatch[1] ? Number(divisionMatch[1]) : (/半拍/.test(prompt) ? 2 : 8);
+    profile.division = Number(divisionMatch[1] || divisionMatch[2]);
     profile.notes.push("拍分割 " + profile.division);
+  } else if (/16分(?:音符|刻み)?/.test(prompt)) {
+    profile.division = 4; profile.notes.push("16分音符相当");
+  } else if (/8分(?:音符|刻み)?/.test(prompt)) {
+    profile.division = 2; profile.notes.push("8分音符相当");
+  } else if (/半拍/.test(prompt)) {
+    profile.division = 2; profile.notes.push("半拍単位");
   }
   if (/細かく|高密度|大量|連打|ぎっしり/.test(prompt)) profile.density = "high";
   if (/ゆっくり|余裕|少なめ|間を空け/.test(prompt)) profile.density = "low";
   if (/高音|高く|ピッチアップ/.test(prompt)) { profile.pitchShift = 5; profile.notes.push("高めの音程"); }
   if (/低音|低く|ピッチダウン/.test(prompt)) { profile.pitchShift = -5; profile.notes.push("低めの音程"); }
+  if (/左右交互|左右に広げ|パンを交互|ステレオ感/.test(prompt)) {
+    profile.panMode = "alternate"; profile.notes.push("左右パン交互");
+  } else if (/中央に|中央定位|センター/.test(prompt)) {
+    profile.panMode = "center"; profile.notes.push("中央定位");
+  }
   return profile;
 }
 
@@ -2723,6 +2734,9 @@ $("autoGenerateBtn").addEventListener("click", () => {
         volume: source.volume * (goal === "voice" ? 0.72 : (index % 4 === 3 ? 0.58 : 0.82)),
         pitch: clamp(source.pitch + profile.pitchShift + (goal === "chaos" && index % 4 === 3
           ? (index % 2 ? 5 : -5) : 0), -24, 24),
+        pan: profile.panMode === "center" ? 0
+          : profile.panMode === "alternate" ? (index % 2 === 0 ? -0.8 : 0.8)
+          : source.pan,
         muted: false,
         solo: false,
         fadeIn: Math.min(source.fadeIn, clipLength * 0.15),
