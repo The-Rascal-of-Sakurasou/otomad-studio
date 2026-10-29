@@ -79,6 +79,7 @@ hr{border:0;border-top:1px solid var(--border);margin:15px 0}
 border-radius:9px;color:var(--muted);font-size:13px}
 .timeline-box{overflow-x:auto;background:#14141b;border-radius:8px;padding:10px}
 #timeline{display:block;min-width:650px;width:100%;height:110px}
+#timeline{cursor:grab;touch-action:none}#timeline.is-moving{cursor:grabbing;outline:1px solid var(--accent)}
 .badge{font-size:10px;background:#343044;color:#ddd6fe;
 padding:3px 6px;border-radius:5px}
 footer{text-align:center;color:var(--muted);font-size:12px;padding:25px}
@@ -132,8 +133,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:25px}
           <canvas id="timeline" width="1100" height="110"
             aria-label="音声トラックのタイムライン"></canvas>
         </div>
-        <p class="muted">トラックの開始位置は各トラックの設定から変更できます。
-        トラックをドラッグすると上下の順番を変更できます。</p>
+        <p class="muted">タイムライン上のトラック帯を左右にドラッグすると開始位置を変更できます。左端の0秒より前には移動できません。トラック一覧ではドラッグして上下の順番を変更できます。</p>
       </section>
 
       <section class="panel">
@@ -951,6 +951,89 @@ function drawTimeline() {
     );
   });
 }
+
+(function enableTimelineDragging() {
+  const canvas = $("timeline");
+  let activeTrack = null;
+  let pointerId = null;
+  let startX = 0;
+  let startPosition = 0;
+  let secondsPerPixel = 0;
+  let moved = false;
+
+  function point(event) {
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: (event.clientX - rect.left) * canvas.width / rect.width,
+      y: (event.clientY - rect.top) * canvas.height / rect.height
+    };
+  }
+
+  canvas.addEventListener("pointerdown", event => {
+    if (busy || event.button !== 0 || !tracks.length) return;
+    const p = point(event);
+    const duration = Math.max(getMixDuration(), 10);
+    const left = 55;
+    const right = canvas.width - 15;
+    const scale = (right - left) / duration;
+    let selected = null;
+
+    for (let i = tracks.length - 1; i >= 0; i--) {
+      const t = tracks[i];
+      const y = 12 + i * Math.min(18, 65 / Math.max(1, tracks.length));
+      const h = Math.max(5, Math.min(12, 65 / Math.max(1, tracks.length)));
+      const x = left + t.position * scale;
+      const w = getTrackOutputDuration(t) * scale;
+      if (p.y >= y - 3 && p.y <= y + h + 3 && p.x >= x - 4 && p.x <= x + Math.max(2, w) + 4) {
+        selected = t;
+        break;
+      }
+    }
+    if (!selected) return;
+
+    event.preventDefault();
+    recordHistory();
+    activeTrack = selected;
+    pointerId = event.pointerId;
+    startX = p.x;
+    startPosition = selected.position;
+    secondsPerPixel = 1 / scale;
+    moved = false;
+    canvas.classList.add("is-moving");
+    canvas.setPointerCapture(pointerId);
+    status("「" + selected.name + "」の開始位置をドラッグで調整中…");
+  });
+
+  canvas.addEventListener("pointermove", event => {
+    if (!activeTrack || event.pointerId !== pointerId) return;
+    const p = point(event);
+    const delta = (p.x - startX) * secondsPerPixel;
+    if (Math.abs(delta) > 0.002) moved = true;
+    activeTrack.position = Math.max(0, Math.round((startPosition + delta) * 1000) / 1000);
+    drawTimeline();
+  });
+
+  function finish(event) {
+    if (!activeTrack || (event && event.pointerId !== pointerId)) return;
+    const name = activeTrack.name;
+    activeTrack = null;
+    pointerId = null;
+    canvas.classList.remove("is-moving");
+    if (moved) {
+      renderTracks();
+      drawTimeline();
+      updateButtons();
+      status("「" + name + "」の開始位置を更新しました。Ctrl+Zで元に戻せます。");
+    } else {
+      undoStack.pop();
+      updateHistoryButtons();
+      status("トラック帯を左右にドラッグすると開始位置を変更できます。");
+    }
+    moved = false;
+  }
+  canvas.addEventListener("pointerup", finish);
+  canvas.addEventListener("pointercancel", finish);
+})();
 
 masterVolume.addEventListener("input", () => {
   $("masterValue").textContent = Math.round(Number(masterVolume.value) * 100) + "%";
