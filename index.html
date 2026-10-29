@@ -142,6 +142,7 @@ button:disabled{cursor:not-allowed;opacity:.48}
  .toolbar button{flex:1 1 auto}
 }
 
+.image-assets{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;margin-top:10px}.image-asset{min-width:0;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--panel2)}.image-asset img{display:block;width:100%;height:100px;object-fit:contain;background:#101014}.image-asset .image-asset-name{font-size:12px;padding:6px;overflow-wrap:anywhere}.image-asset button{margin:0 6px 6px;width:calc(100% - 12px)}
 </style>
 </head>
 <body>
@@ -183,6 +184,12 @@ button:disabled{cursor:not-allowed;opacity:.48}
     </div>
     <input id="fileInput" type="file" accept="audio/*,video/*,.mp4,.mov,.webm,.m4v,.mkv,.avi" multiple hidden>
     <input id="projectInput" type="file" accept=".json,application/json" hidden>
+    <input id="imageInput" type="file" accept="image/*,.png,.jpg,.jpeg,.gif,.webp,.bmp,.avif" multiple hidden>
+    <section id="imageAssetsPanel" class="panel" style="margin-top:12px" aria-label="画像素材">
+      <div class="row spread"><h3 style="margin:0">画像素材</h3><button id="addImagesBtn" class="secondary" type="button">＋ 画像を追加</button></div>
+      <p class="muted">画像を読み込んで参照素材として表示します。現在、画像は音声トラックやWAV書き出しには合成されません。</p>
+      <div id="imageAssets" class="image-assets"><p class="muted">画像はまだ追加されていません。</p></div>
+    </section>
     <div id="status" class="status" role="status" aria-live="polite">
       音声または動画ファイルを追加してください。
     </div>
@@ -453,6 +460,9 @@ const $ = id => document.getElementById(id);
 
 const fileInput = $("fileInput");
 const projectInput = $("projectInput");
+const imageInput = $("imageInput");
+const imageAssets = $("imageAssets");
+const imageAssetUrls = new Map();
 const trackList = $("trackList");
 const statusBox = $("status");
 const playBtn = $("playBtn");
@@ -728,6 +738,51 @@ function createTrack(name, buffer) {
 }
 
 $("importBtn").addEventListener("click", () => fileInput.click());
+
+$("addImagesBtn").addEventListener("click", () => imageInput.click());
+imageInput.addEventListener("change", () => {
+  const files = Array.from(imageInput.files || []);
+  let added = 0;
+  for (const file of files) {
+    if (!file.type.startsWith("image/") || !file.size) continue;
+    const url = URL.createObjectURL(file);
+    const id = "image-" + makeId() + "-" + added;
+    imageAssetUrls.set(id, url);
+    const card = document.createElement("article");
+    card.className = "image-asset";
+    card.dataset.imageId = id;
+    const img = document.createElement("img");
+    img.src = url;
+    img.alt = file.name;
+    img.loading = "lazy";
+    const name = document.createElement("div");
+    name.className = "image-asset-name";
+    name.textContent = file.name;
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "secondary";
+    remove.textContent = "画像を削除";
+    remove.addEventListener("click", () => {
+      URL.revokeObjectURL(url);
+      imageAssetUrls.delete(id);
+      card.remove();
+      if (!imageAssets.querySelector(".image-asset")) {
+        imageAssets.replaceChildren();
+        const empty = document.createElement("p");
+        empty.className = "muted";
+        empty.textContent = "画像はまだ追加されていません。";
+        imageAssets.append(empty);
+      }
+    });
+    card.append(img, name, remove);
+    if (!imageAssets.querySelector(".image-asset")) imageAssets.replaceChildren();
+    imageAssets.append(card);
+    added++;
+  }
+  imageInput.value = "";
+  status(added ? added + "枚の画像を参照素材として追加しました。" : "画像を読み込めませんでした。PNG・JPG・WebPなどの画像ファイルを選択してください。");
+});
+
 
 // 動画ファイルから音声を取り出し、編集可能な音声トラックとして読み込む。
 async function extractAudioFromVideo(file, ctx) {
