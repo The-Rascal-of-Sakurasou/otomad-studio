@@ -743,9 +743,12 @@ async function loadAudioFiles(fileList) {
     const ctx = await getAudioContext();
 
     for (const file of files) {
-      // MIMEタイプが空のファイルもあるため、明らかに音声以外の場合だけ先に除外する。
-      if (file.type && !file.type.startsWith("audio/")) {
+      // iOSの「ファイル」アプリなどでは、音声でも file.type が
+      // application/octet-stream や video/mp4 になることがあるため、
+      // MIMEタイプだけで除外せず、実際にデコードして判定する。
+      if (!file.size) {
         failed++;
+        console.warn("空のファイルのため読み込めません:", file.name);
         continue;
       }
 
@@ -764,8 +767,8 @@ async function loadAudioFiles(fileList) {
     status(
       success
         ? `${success}個の素材を追加しました。` +
-          (failed ? ` 読み込めなかったファイル：${failed}個。失敗した場合はMP3・WAV・M4Aなどの音声ファイルか確認してください。` : "")
-        : "音声を読み込めませんでした。MP3・WAV・M4Aなどの音声ファイルを選び、ファイルが破損していないか確認してください。"
+          (failed ? ` 読み込めなかったファイル：${failed}個。音声形式に対応していないか、ファイルが破損している可能性があります。` : "")
+        : "音声を読み込めませんでした。MP3・WAV・M4A形式を試してください。音声ファイルでも読み込めない場合は、別の形式に変換してから再度お試しください。"
     );
   } catch (error) {
     console.error(error);
