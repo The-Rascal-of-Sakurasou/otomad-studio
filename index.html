@@ -2520,7 +2520,7 @@ $("bulkPositionApplyBtn").addEventListener("click", () => {
 $("bulkDeleteBtn").addEventListener("click", () => {
   if (busy || !selectedTrackIds.size) return;
   const count = selectedTrackIds.size;
-  if (!confirm("選択した" + count + "個のトラックを削除しますか？")) return;
+  if (!confirm("選択した" + count + "個のトラックを削除しますか？\\n削除後も「元に戻す」または Ctrl+Z で復元できます。")) return;
   recordHistory();
   stopPlayback();
   tracks = tracks.filter(track => !selectedTrackIds.has(track.id));
@@ -2532,7 +2532,11 @@ $("bulkDeleteBtn").addEventListener("click", () => {
 
 $("clearBtn").addEventListener("click", () => {
   if (busy) return;
-  if (!confirm("すべてのトラックを削除しますか？")) return;
+  if (!tracks.length) {
+    status("削除できるトラックはありません。先に音声素材を追加してください。");
+    return;
+  }
+  if (!confirm("すべてのトラックを削除しますか？\\n削除後も「元に戻す」または Ctrl+Z で復元できます。")) return;
 
   recordHistory();
   stopPlayback();
