@@ -2613,11 +2613,12 @@ $("autoGenerateBtn").addEventListener("click", () => {
   const sensitivity = Number($("transientSensitivity").value) || 5;
   const maxClips = goal === "chaos" ? 64 : goal === "voice" ? 28 : 48;
   const generated = [];
-  const buckets = sources.map(source => {
+  const eligibleSources = sources.filter(source => source.end - source.startTrim >= 0.08);
+  const buckets = eligibleSources.map(source => {
     const candidates = detectTransientCandidates(source.buffer, sensitivity)
-      .filter(item => item.time >= source.startTrim && item.time < source.end)
+      .filter(item => item.time >= source.startTrim && item.time < source.end - 0.03)
       .sort((a, b) => b.strength - a.strength)
-      .slice(0, goal === "voice" ? 6 : 12)
+      .slice(0, goal === "voice" ? 8 : goal === "music" ? 16 : 12)
       .sort((a, b) => a.time - b.time);
     return { source, items: candidates.length ? candidates : [{ time: source.startTrim, strength: 0.01 }] };
   });
@@ -2635,14 +2636,27 @@ $("autoGenerateBtn").addEventListener("click", () => {
       if (!candidate) continue;
       const source = bucket.source;
       const start = clamp(candidate.time, source.startTrim, Math.max(source.startTrim, source.end - 0.04));
-      const clipLength = Math.min(source.end - start, Math.max(0.06, interval * (goal === "chaos" ? 1.15 : 1.8)));
+      const desiredLength = goal === "voice"
+        ? beat * 0.62
+        : goal === "music"
+          ? beat * 0.88
+          : interval * (goal === "chaos" ? 1.2 : 1.65);
+      const clipLength = Math.min(source.end - start, Math.max(0.06, desiredLength));
       if (clipLength < 0.04) continue;
       const index = generated.length;
+      // 方向性ごとに配置パターンを変え、単調な等間隔配置を避ける。
+      const position = goal === "voice"
+        ? Math.floor(index / 4) * beat * 4 + (index % 4) * beat
+        : goal === "music"
+          ? Math.floor(index / 4) * beat * 4 + (index % 4) * beat
+          : goal === "chaos"
+            ? index * interval + (index % 5 === 4 ? interval * 0.5 : 0)
+            : index * interval;
       generated.push({
         ...source,
         id: makeId(),
         name: "自動生成 " + String(index + 1).padStart(2, "0") + " · " + source.name,
-        position: index * interval,
+        position,
         startTrim: start,
         end: start + clipLength,
         volume: source.volume * (goal === "voice" ? 0.72 : (index % 4 === 3 ? 0.58 : 0.82)),
