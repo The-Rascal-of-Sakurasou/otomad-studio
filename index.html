@@ -275,7 +275,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:25px}
         <h2>AI制作アシスタント（ローカル解析）</h2>
         <p class="muted">素材の長さ・音量・ピークをブラウザ内で解析し、編集計画のたたき台を作ります。生成AIモデルではなく、外部API接続なしで動く補助機能です。</p>
         <div class="field"><label for="aiGoal">作りたい音MADの方向性</label><select id="aiGoal"><option value="rhythm">リズム重視・細かい刻み</option><option value="voice">セリフ中心・聞き取りやすさ</option><option value="chaos">テンポの速いカオス系</option><option value="music">原曲に合わせた音程・リズム</option></select></div>
-        <div class="toolbar"><button id="analyzeBtn" class="secondary" disabled>素材を解析して編集案を作成</button><button id="copyPlanBtn" class="secondary" disabled>編集案をコピー</button><button id="exportAnalysisBtn" class="secondary" disabled>解析データをJSON保存</button></div>
+        <div class="toolbar"><button id="analyzeBtn" class="secondary" disabled>素材を解析して編集案を作成</button><button id="copyPlanBtn" class="secondary" disabled>編集案をコピー</button><button id="exportAnalysisBtn" class="secondary" disabled>解析データをJSON保存</button><button id="autoGainBtn" class="secondary" disabled>選択素材の音量を自動調整</button></div>
         <div class="field" style="margin-top:8px">
           <label for="arrangeMode">自動配置モード</label>
           <select id="arrangeMode">
@@ -2370,6 +2370,31 @@ function detectTransientCandidates(buffer) {
 }
 
 let lastAiPlan = "";
+$("autoGainBtn").addEventListener("click", () => {
+  if (busy) return;
+  const targets = tracks.filter(track => selectedTrackIds.has(track.id));
+  if (!targets.length) {
+    status("先に音量を調整したいトラックを選択してください。");
+    return;
+  }
+  const changes = targets.map(track => {
+    const metrics = analyzeAudioBuffer(track.buffer);
+    const peak = metrics.peak;
+    if (peak < 0.0001) return {track, volume: track.volume, skipped: true};
+    return {track, volume: clamp(track.volume * (0.75 / peak), 0, 2), skipped: false};
+  });
+  if (!changes.some(change => !change.skipped && Math.abs(change.volume - change.track.volume) > 0.001)) {
+    status("調整が必要な素材はありませんでした。");
+    return;
+  }
+  recordHistory();
+  stopPlayback();
+  changes.forEach(change => { if (!change.skipped) change.track.volume = change.volume; });
+  renderTracks();
+  drawTimeline();
+  const skipped = changes.filter(change => change.skipped).length;
+  status("選択素材のピークを目安に音量を調整しました。" + (skipped ? " 無音に近い素材 " + skipped + "件は変更していません。" : "") + " ミックス全体の音割れは再生して確認してください。");
+});
 let lastAnalysisData = null;
 $("exportAnalysisBtn").addEventListener("click", () => {
   if (!lastAnalysisData) return;
@@ -2467,6 +2492,7 @@ $("analyzeBtn").addEventListener("click", () => {
     })
   };
   $("exportAnalysisBtn").disabled = false;
+  $("autoGainBtn").disabled = false;
   lastAiPlan = lines.join("\n");
   $("aiPlan").textContent = lastAiPlan;
   const jumpList = $("quietJumpList");
