@@ -54,6 +54,8 @@ font-size:12px;color:var(--muted)}
 #trackList{display:flex;flex-direction:column;gap:12px}
 .track{background:#15151c;border:1px solid var(--border);
 border-radius:10px;padding:13px;min-width:0}
+.track.is-selected{border-color:var(--accent);box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 35%,transparent);background:color-mix(in srgb,var(--accent) 5%,#15151c)}
+.track-select-label{cursor:pointer}.track-select-label:has(input:checked){color:var(--accent)}
 .track.dragging{opacity:.45}
 .track.drop-target{border-color:var(--accent)}
 .track-head{display:flex;align-items:center;gap:9px;margin-bottom:10px}
@@ -599,7 +601,7 @@ function updateButtons() {
   updateGroupFilterOptions();
   $("bulkMuteBtn").textContent = selectedCount > 0 && tracks.filter(t => selectedTrackIds.has(t.id)).every(t => t.muted) ? "選択のミュート解除" : "選択をミュート";
   $("bulkSoloBtn").textContent = selectedCount > 0 && tracks.filter(t => selectedTrackIds.has(t.id)).every(t => t.solo) ? "選択のソロ解除" : "選択をソロ";
-  $("trackCount").textContent = tracks.length + " tracks / 選択 " + selectedCount;
+  $("trackCount").textContent = tracks.length + "トラック / 選択中 " + selectedCount;
   $("sliceTrackBtn").disabled = busy || !hasTracks;
   $("transientSliceBtn").disabled = busy || !hasTracks;
   $("transientPreviewBtn").disabled = busy || !hasTracks;
@@ -617,7 +619,7 @@ function updateButtons() {
   $("previewArrangeBtn").disabled = busy || tracks.length < 2;
   $("importBtn").disabled = busy;
   $("stopBtn").disabled = playbackSources.length === 0;
-  $("trackCount").textContent = tracks.length + " tracks";
+  $("trackCount").textContent = tracks.length + "トラック / 選択中 " + selectedCount;
   $("infoTracks").textContent = tracks.length;
   const duration = getMixDuration();
   $("durationLabel").textContent = duration.toFixed(2) + " 秒";
@@ -995,8 +997,9 @@ function renderTracks() {
 
   tracks.forEach((track, index) => {
     const article = document.createElement("article");
-    article.className = "track";
+    article.className = selectedTrackIds.has(track.id) ? "track is-selected" : "track";
     article.draggable = !busy;
+    article.setAttribute("aria-label", "トラック " + (index + 1) + "：" + track.name);
     article.dataset.id = track.id;
 
     article.addEventListener("dragstart", event => {
@@ -1057,6 +1060,7 @@ function renderTracks() {
     selectBox.addEventListener("change", () => {
       if (selectBox.checked) selectedTrackIds.add(track.id);
       else selectedTrackIds.delete(track.id);
+      article.classList.toggle("is-selected", selectBox.checked);
       updateButtons();
     });
     selectLabel.append(selectBox);
