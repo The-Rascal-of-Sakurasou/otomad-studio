@@ -62,6 +62,10 @@ border-radius:10px;padding:13px;min-width:0}
 .track-select{width:18px;height:18px;flex:none}
 #transientPreview{white-space:pre-wrap;overflow-wrap:anywhere;background:#111117;border:1px solid var(--border);border-radius:8px;padding:10px;line-height:1.65}
 #transientCandidateJumps button{font-size:12px;padding:6px 8px}
+#transientCandidateJumps .transient-candidate-item{display:flex;gap:4px;align-items:center;flex-wrap:wrap}
+#transientCandidateJumps .transient-exclude-toggle{border-color:#a1a1aa}
+#transientCandidateJumps .transient-candidate-item.is-excluded{opacity:.55}
+#transientCandidateJumps .transient-candidate-item.is-excluded .transient-exclude-toggle{border-color:#f87171;color:#fca5a5}
 /* 自動刻み候補はタイムライン上に黄色で重ねて表示 */
 .bulk-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:0 0 12px}.bulk-controls .row{align-items:stretch}.bulk-controls input{min-width:80px;flex:1}@media(max-width:600px){.bulk-controls{grid-template-columns:1fr}}.track-head .track-select-label{display:flex;align-items:center;gap:5px;color:var(--muted);font-size:11px;flex:none}
 .track-name{font-weight:750;overflow-wrap:anywhere;flex:1;min-width:0}
@@ -428,6 +432,7 @@ let seekOffset = 0;
 
 const selectedTrackIds = new Set();
 let transientTimelineOverlay = null;
+let transientCandidateReview = null;
 
 const undoStack = [];
 const redoStack = [];
@@ -1385,6 +1390,7 @@ $("sliceTrackBtn").addEventListener("click", () => {
   }));
   tracks.splice(index, 1, ...segments);
   transientTimelineOverlay = null;
+  transientCandidateReview = null;
   $("transientCandidateJumps").replaceChildren();
   seekOffset = 0;
   renderTracks();
@@ -1404,7 +1410,10 @@ $("transientPreviewBtn").addEventListener("click", () => {
   drawTimeline();
   const jumpList = $("transientCandidateJumps");
   jumpList.replaceChildren();
+  transientCandidateReview = { trackId: source.id, times: candidates.slice(), excluded: new Set() };
   candidates.slice(0, 10).forEach((time, index) => {
+    const wrap = document.createElement("div");
+    wrap.className = "transient-candidate-item";
     const button = document.createElement("button");
     button.type = "button";
     button.className = "secondary";
@@ -1418,7 +1427,31 @@ $("transientPreviewBtn").addEventListener("click", () => {
       drawTimeline();
       status("検出候補 " + (index + 1) + "（素材内 " + time.toFixed(2) + " 秒）の位置へ移動しました。「再生」で確認できます。");
     });
-    jumpList.append(button);
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "secondary transient-exclude-toggle";
+    const updateToggle = () => {
+      const excluded = transientCandidateReview.excluded.has(time);
+      toggle.textContent = excluded ? "除外中（戻す）" : "採用中（除外）";
+      toggle.setAttribute("aria-pressed", String(excluded));
+      wrap.classList.toggle("is-excluded", excluded);
+    };
+    toggle.addEventListener("click", () => {
+      if (!transientCandidateReview || transientCandidateReview.trackId !== source.id) return;
+      if (transientCandidateReview.excluded.has(time)) transientCandidateReview.excluded.delete(time);
+      else transientCandidateReview.excluded.add(time);
+      updateToggle();
+      transientTimelineOverlay.times = candidates.filter(candidate => !transientCandidateReview.excluded.has(candidate));
+      drawTimeline();
+      const excludedCount = transientCandidateReview.excluded.size;
+      const remaining = candidates.filter(candidate => !transientCandidateReview.excluded.has(candidate) && candidate > source.startTrim + 0.08).slice(0, 15);
+      $("transientPreview").textContent = "検出候補：" + candidates.length + "か所 / 除外：" + excludedCount +
+        "か所 / 分割予定：約" + Math.max(0, remaining.length + 1) +
+        "個\n除外した候補は自動刻みに使いません。候補位置を確認してから実行してください。";
+    });
+    updateToggle();
+    wrap.append(button, toggle);
+    jumpList.append(wrap);
   });
   if (!candidates.length) {
     const note = document.createElement("span");
@@ -1461,7 +1494,9 @@ $("transientSliceBtn").addEventListener("click", () => {
   const candidates = detectTransientCandidates(source.buffer, Number($("transientSensitivity").value))
     .filter(item => item.time >= source.startTrim && item.time < source.end)
     .map(item => item.time)
-    .filter((time, i, list) => i === 0 || time - list[i-1] >= 0.12);
+    .filter((time, i, list) => i === 0 || time - list[i-1] >= 0.12)
+    .filter(time => !(transientCandidateReview && transientCandidateReview.trackId === source.id &&
+      transientCandidateReview.excluded.has(time)));
   const boundaries = [source.startTrim, ...candidates.filter(time => time > source.startTrim + 0.08).slice(0, 15), source.end]
     .filter((time, i, list) => i === 0 || time - list[i-1] >= 0.12);
   if (boundaries.length < 3) {
