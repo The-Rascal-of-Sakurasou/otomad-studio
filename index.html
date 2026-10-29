@@ -1263,6 +1263,29 @@ window.addEventListener("beforeunload", () => {
   }
 });
 
+
+/* キーボード操作：Spaceで再生／停止、Escで停止 */
+document.addEventListener("keydown", (event) => {
+  const target = event.target;
+  if (
+    target &&
+    (target.matches("input, textarea, select, button") || target.isContentEditable)
+  ) return;
+
+  if (event.code === "Space") {
+    event.preventDefault();
+    if (playbackSources.length > 0) {
+      stopPlayback();
+      status("再生を停止しました。");
+    } else if (!busy && tracks.length > 0) {
+      playBtn.click();
+    }
+  } else if (event.key === "Escape" && playbackSources.length > 0) {
+    stopPlayback();
+    status("再生を停止しました。");
+  }
+});
+
 renderTracks();
 drawTimeline();
 updateButtons();
