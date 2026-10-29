@@ -61,6 +61,7 @@ border-radius:10px;padding:13px;min-width:0}
 .track-head{display:flex;align-items:center;gap:9px;margin-bottom:10px}
 .track-select{width:18px;height:18px;flex:none}
 #transientPreview{white-space:pre-wrap;overflow-wrap:anywhere;background:#111117;border:1px solid var(--border);border-radius:8px;padding:10px;line-height:1.65}
+#transientCandidateJumps button{font-size:12px;padding:6px 8px}
 /* 自動刻み候補はタイムライン上に黄色で重ねて表示 */
 .bulk-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:0 0 12px}.bulk-controls .row{align-items:stretch}.bulk-controls input{min-width:80px;flex:1}@media(max-width:600px){.bulk-controls{grid-template-columns:1fr}}.track-head .track-select-label{display:flex;align-items:center;gap:5px;color:var(--muted);font-size:11px;flex:none}
 .track-name{font-weight:750;overflow-wrap:anywhere;flex:1;min-width:0}
@@ -360,6 +361,7 @@ button:disabled{cursor:not-allowed;opacity:.48}
         </div>
         <p class="muted">選択した素材の使用範囲を等分し、元の位置から順番に並べた別トラックにします。元の素材は置き換わり、Ctrl+Zで戻せます。</p>
         <p id="transientPreview" class="muted" aria-live="polite">自動刻みの感度を調整し、「刻み候補を確認」で検出数を確認できます。</p>
+        <div id="transientCandidateJumps" class="toolbar" aria-label="検出位置へ移動" style="margin-top:8px"></div>
         <p class="muted">選んだ素材を指定した拍の間隔で複製します。元の素材は残り、Ctrl+Zで取り消せます。</p>
         <pre id="arrangePreview" class="ai-plan" aria-live="polite" hidden></pre>
         <p class="muted">適用すると、既存トラックの開始位置をBPMに合わせて並べ替えます。音声自体は複製・削除せず、Ctrl+Zで元に戻せます。</p>
@@ -1382,6 +1384,8 @@ $("sliceTrackBtn").addEventListener("click", () => {
     fadeOut: Math.min(source.fadeOut, segmentLength)
   }));
   tracks.splice(index, 1, ...segments);
+  transientTimelineOverlay = null;
+  $("transientCandidateJumps").replaceChildren();
   seekOffset = 0;
   renderTracks();
   drawTimeline();
@@ -1398,6 +1402,30 @@ $("transientPreviewBtn").addEventListener("click", () => {
     .filter((time, i, list) => i === 0 || time - list[i-1] >= 0.12);
   transientTimelineOverlay = { trackId: source.id, times: candidates.slice(0, 40) };
   drawTimeline();
+  const jumpList = $("transientCandidateJumps");
+  jumpList.replaceChildren();
+  candidates.slice(0, 10).forEach((time, index) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "secondary";
+    button.textContent = (index + 1) + "：" + time.toFixed(2) + "秒";
+    button.title = "この検出位置から再生を開始";
+    button.addEventListener("click", () => {
+      const outputTime = source.position + (time - source.startTrim) / Math.pow(2, source.pitch / 12);
+      seekOffset = clamp(outputTime, 0, Math.max(0, getMixDuration()));
+      $("seekSlider").value = String(seekOffset);
+      $("seekLabel").textContent = seekOffset.toFixed(2) + " 秒";
+      drawTimeline();
+      status("検出候補 " + (index + 1) + "（素材内 " + time.toFixed(2) + " 秒）の位置へ移動しました。「再生」で確認できます。");
+    });
+    jumpList.append(button);
+  });
+  if (!candidates.length) {
+    const note = document.createElement("span");
+    note.className = "muted";
+    note.textContent = "移動できる候補はありません。感度を調整してください。";
+    jumpList.append(note);
+  }
   $("transientPreview").setAttribute("data-source-track", String(source.id));
   const boundaries = [source.startTrim, ...candidates.filter(time => time > source.startTrim + 0.08).slice(0, 15), source.end]
     .filter((time, i, list) => i === 0 || time - list[i-1] >= 0.12);
