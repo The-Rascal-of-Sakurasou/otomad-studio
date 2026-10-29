@@ -35,6 +35,8 @@ border-bottom:1px solid var(--border);background:#15151c}
 .subtitle{color:var(--muted);font-size:13px;margin-top:4px}
 main{max-width:1400px;margin:auto;padding:18px}
 .layout{display:grid;grid-template-columns:minmax(0,1fr) 310px;gap:16px}
+.file-drop-active{outline:3px dashed var(--accent);outline-offset:-7px;background:#29243a!important}
+.file-drop-active::after{content:"ここに音声ファイルをドロップして追加";display:block;text-align:center;padding:18px;color:var(--accent);font-weight:700}
 .panel{background:var(--panel);border:1px solid var(--border);
 border-radius:12px;padding:17px;margin-bottom:15px;min-width:0}
 h2{font-size:16px;margin:0 0 14px}
@@ -318,9 +320,9 @@ function createTrack(name, buffer) {
 
 $("importBtn").addEventListener("click", () => fileInput.click());
 
-fileInput.addEventListener("change", async () => {
-  const files = Array.from(fileInput.files || []);
-  if (!files.length) return;
+async function loadAudioFiles(fileList) {
+  const files = Array.from(fileList || []);
+  if (!files.length || busy) return;
 
   setBusy(true);
   status("音声ファイルを読み込んでいます…");
@@ -343,23 +345,59 @@ fileInput.addEventListener("change", async () => {
         tracks.push(createTrack(file.name, buffer));
         success++;
       } catch (error) {
-        console.error(error);
+        console.error("音声の読み込みに失敗:", file.name, error);
         failed++;
       }
     }
 
     status(
       `${success}個の素材を追加しました。` +
-      (failed ? ` 読み込めなかった素材：${failed}個。` : "")
+      (failed ? ` 読み込めなかったファイル：${failed}個。` : "")
     );
   } catch (error) {
     console.error(error);
-    status("音声の読み込みに失敗しました。");
+    status("音声の読み込みに失敗しました。対応形式の音声ファイルか確認してください。");
   } finally {
     fileInput.value = "";
     setBusy(false);
     drawTimeline();
   }
+}
+
+fileInput.addEventListener("change", () => {
+  loadAudioFiles(fileInput.files);
+});
+
+// ページ上に音声ファイルをドラッグ＆ドロップして追加できるようにする。
+// トラックの並べ替え操作は既存のトラック内イベントに任せる。
+const projectPanel = document.querySelector("main > .panel");
+let fileDragDepth = 0;
+
+document.addEventListener("dragenter", event => {
+  if (!event.dataTransfer || !Array.from(event.dataTransfer.types || []).includes("Files")) return;
+  event.preventDefault();
+  fileDragDepth++;
+  projectPanel.classList.add("file-drop-active");
+});
+
+document.addEventListener("dragover", event => {
+  if (!event.dataTransfer || !Array.from(event.dataTransfer.types || []).includes("Files")) return;
+  event.preventDefault();
+  event.dataTransfer.dropEffect = "copy";
+});
+
+document.addEventListener("dragleave", event => {
+  if (!event.dataTransfer || !Array.from(event.dataTransfer.types || []).includes("Files")) return;
+  fileDragDepth = Math.max(0, fileDragDepth - 1);
+  if (fileDragDepth === 0) projectPanel.classList.remove("file-drop-active");
+});
+
+document.addEventListener("drop", event => {
+  if (!event.dataTransfer || !event.dataTransfer.files || !event.dataTransfer.files.length) return;
+  event.preventDefault();
+  fileDragDepth = 0;
+  projectPanel.classList.remove("file-drop-active");
+  loadAudioFiles(event.dataTransfer.files);
 });
 
 function createField(labelText, value, min, max, step, callback, type = "number") {
