@@ -1742,14 +1742,21 @@ $("analyzeBtn").addEventListener("click", () => {
     lines.push((index+1) + ". " + track.name);
     lines.push("   長さ " + m.duration.toFixed(2) + "秒 / RMS " + m.rms.toFixed(3) + " / 最大ピーク " + m.peak.toFixed(3) + " / 低音量区間 約" + Math.round(m.quietRatio*100) + "%");
     lines.push("   分類の目安：" + category);
-    const regions = m.quietRegions.filter(region => region.end - region.start >= 0.35);
+    const regions = m.quietRegions
+      .filter(region => region.end - region.start >= 0.35 &&
+        region.end > track.startTrim && region.start < track.end)
+      .map(region => ({
+        start: Math.max(region.start, track.startTrim),
+        end: Math.min(region.end, track.end)
+      }))
+      .filter(region => region.end - region.start >= 0.35);
     if (regions.length) {
       lines.push("   無音候補（0.35秒以上・音量しきい値による概算）：" +
         regions.slice(0, 8).map(region => region.start.toFixed(2) + "–" + region.end.toFixed(2) + "秒").join("、") +
         (regions.length > 8 ? " ほか" + (regions.length - 8) + "区間" : ""));
       regions.slice(0, 8).forEach(region => quietJumps.push({
         label: track.name + "：" + region.start.toFixed(2) + "–" + region.end.toFixed(2) + "秒",
-        time: track.position + region.start / Math.pow(2, track.pitch / 12)
+        time: track.position + (region.start - track.startTrim) / Math.pow(2, track.pitch / 12)
       }));
     } else {
       lines.push("   無音候補：0.35秒以上の区間は検出されませんでした。");
