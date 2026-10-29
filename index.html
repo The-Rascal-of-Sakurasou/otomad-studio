@@ -743,7 +743,8 @@ async function loadAudioFiles(fileList) {
     const ctx = await getAudioContext();
 
     for (const file of files) {
-      if (!file.type.startsWith("audio/")) {
+      // MIMEタイプが空のファイルもあるため、明らかに音声以外の場合だけ先に除外する。
+      if (file.type && !file.type.startsWith("audio/")) {
         failed++;
         continue;
       }
@@ -761,12 +762,14 @@ async function loadAudioFiles(fileList) {
     }
 
     status(
-      `${success}個の素材を追加しました。` +
-      (failed ? ` 読み込めなかったファイル：${failed}個。` : "")
+      success
+        ? `${success}個の素材を追加しました。` +
+          (failed ? ` 読み込めなかったファイル：${failed}個。失敗した場合はMP3・WAV・M4Aなどの音声ファイルか確認してください。` : "")
+        : "音声を読み込めませんでした。MP3・WAV・M4Aなどの音声ファイルを選び、ファイルが破損していないか確認してください。"
     );
   } catch (error) {
     console.error(error);
-    status("音声の読み込みに失敗しました。対応形式の音声ファイルか確認してください。");
+    status("音声の読み込みを開始できませんでした。ページを再読み込みし、もう一度お試しください。");
   } finally {
     fileInput.value = "";
     setBusy(false);
@@ -2136,7 +2139,14 @@ exportBtn.addEventListener("click", async () => {
     status("WAVファイルを書き出しました。");
   } catch (error) {
     console.error(error);
-    status(error.message || "書き出しに失敗しました。");
+    const message = error && error.message ? error.message : "";
+    status(
+      message.includes("5分以内")
+        ? "書き出せませんでした。素材の配置を確認し、ミックス全体を5分以内にしてください。"
+        : message.includes("メモリ")
+          ? "メモリが不足しています。素材を短くするか、サンプルレートを下げて再度お試しください。"
+          : "WAVの書き出しに失敗しました。素材の長さを短くし、不要なタブを閉じてから再度お試しください。"
+    );
   } finally {
     setBusy(false);
   }
@@ -2357,7 +2367,11 @@ projectInput.addEventListener("change", async () => {
     );
   } catch (error) {
     console.error(error);
-    status(error.message || "プロジェクト設定を読み込めませんでした。");
+    status(
+      error instanceof SyntaxError
+        ? "JSONを読み込めませんでした。OtoMAD Studioで保存した編集設定ファイルを選んでください。"
+        : (error.message || "プロジェクト設定を読み込めませんでした。")
+    );
   } finally {
     projectInput.value = "";
   }
