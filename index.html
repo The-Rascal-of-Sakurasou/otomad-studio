@@ -4,7 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#101014">
-<title>Otomad AI | Audio Studio</title>
+<meta name="description" content="OtoMAD Studio — 音声編集・ミキシング・音MAD制作支援ツール">
+<title>OtoMAD Studio — Audio Creation Studio</title>
 
 <style>
 :root {
@@ -17,13 +18,15 @@
   --muted: #a1a1aa;
 }
 
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+}
 
 body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: system-ui, sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 header {
@@ -31,10 +34,17 @@ header {
   border-bottom: 1px solid var(--border);
 }
 
-h1 { margin: 0; font-size: 27px; }
-h1 span { color: var(--accent); }
+h1 {
+  margin: 0;
+  font-size: 27px;
+}
 
-header p, .muted {
+h1 span {
+  color: var(--accent);
+}
+
+header p,
+.muted {
   color: var(--muted);
   line-height: 1.7;
 }
@@ -53,9 +63,13 @@ main {
   margin-bottom: 18px;
 }
 
-h2 { font-size: 19px; margin-top: 0; }
+h2 {
+  font-size: 19px;
+  margin-top: 0;
+}
 
-button, .button {
+button,
+.button {
   background: var(--accent);
   color: #171221;
   border: none;
@@ -63,6 +77,11 @@ button, .button {
   padding: 11px 15px;
   font-weight: 700;
   cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+button:hover {
+  opacity: 0.88;
 }
 
 button.secondary {
@@ -76,11 +95,12 @@ button.danger {
 }
 
 button:disabled {
-  opacity: .45;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
-input, select {
+input,
+select {
   accent-color: var(--accent);
 }
 
@@ -122,7 +142,10 @@ input[type="file"] {
   margin-bottom: 14px;
 }
 
-.track-title { font-weight: 700; }
+.track-title {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
 
 .grid {
   display: grid;
@@ -138,6 +161,7 @@ input[type="file"] {
 }
 
 .wave {
+  display: block;
   width: 100%;
   height: 42px;
   margin-top: 10px;
@@ -151,7 +175,9 @@ input[type="file"] {
   line-height: 1.7;
 }
 
-#masterVolume { width: 100%; }
+#masterVolume {
+  width: 100%;
+}
 
 footer {
   text-align: center;
@@ -161,15 +187,24 @@ footer {
 }
 
 @media (max-width: 650px) {
-  .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .panel { padding: 15px; }
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .panel {
+    padding: 15px;
+  }
+
+  header {
+    padding: 20px 15px;
+  }
 }
 </style>
 </head>
 
 <body>
 <header>
-  <h1><span>Otomad</span> AI</h1>
+  <h1><span>OtoMAD</span> Studio</h1>
   <p>Audio Creation Studio — マルチトラック音声編集</p>
 </header>
 
@@ -178,9 +213,16 @@ footer {
     <h2>01 / 音声素材</h2>
     <p class="muted">
       複数の音声ファイルを読み込み、開始位置や音程を調整して合成します。
+      音声の処理はブラウザ内で行います。
     </p>
 
-    <input id="files" type="file" accept="audio/*" multiple>
+    <input
+      id="files"
+      type="file"
+      accept="audio/*"
+      multiple
+      aria-label="音声ファイルを選択"
+    >
 
     <div class="actions">
       <button id="preview" disabled>ミックスを再生</button>
@@ -188,7 +230,9 @@ footer {
       <button id="export" disabled>WAVを書き出す</button>
     </div>
 
-    <p id="status" role="status">音声ファイルを選択してください。</p>
+    <p id="status" role="status" aria-live="polite">
+      音声ファイルを選択してください。
+    </p>
   </section>
 
   <section class="panel">
@@ -196,8 +240,14 @@ footer {
 
     <div class="field">
       <label for="masterVolume">マスター音量</label>
-      <input id="masterVolume" type="range"
-        min="0" max="1" step="0.05" value="0.8">
+      <input
+        id="masterVolume"
+        type="range"
+        min="0"
+        max="1"
+        step="0.05"
+        value="0.8"
+      >
       <span id="masterValue">80%</span>
     </div>
 
@@ -208,23 +258,40 @@ footer {
 
   <section class="panel">
     <h2>03 / 操作方法</h2>
+
     <ol class="muted">
-      <li>「音声素材」から2つ以上の音声を読み込みます。</li>
+      <li>「音声素材」から音声ファイルを読み込みます。</li>
       <li>各素材の開始位置を秒単位で設定します。</li>
       <li>音程・音量・開始位置を調整します。</li>
       <li>「ミックスを再生」で仕上がりを確認します。</li>
       <li>「WAVを書き出す」で合成した音声を保存します。</li>
     </ol>
+
     <p class="muted">
-      ※ このバージョンでは音程変更によって再生速度も変わります。
-      音声はブラウザ内で処理され、サーバーには送信されません。
+      ※ 現在の音程変更は再生速度も変化する方式です。
+      音声はブラウザ内で処理され、このプロトタイプから
+      音声ファイルがサーバーへ送信されることはありません。
+    </p>
+  </section>
+
+  <section class="panel">
+    <h2>04 / OtoMAD Studioについて</h2>
+    <p class="muted">
+      OtoMAD Studioは、音MAD制作を支援する音声編集プロジェクトです。
+      現在はマルチトラック編集とWAV書き出しを中心に開発しています。
+      今後、リズム解析やAIによる制作支援などの機能を段階的に追加することを目指します。
+    </p>
+    <p class="muted">
+      音声素材を使用・公開する際は、著作権や必要な利用許諾を確認してください。
     </p>
   </section>
 </main>
 
-<footer>Otomad AI · Audio Creation Studio</footer>
+<footer>OtoMAD Studio · Audio Creation Studio</footer>
 
 <script>
+"use strict";
+
 const $ = id => document.getElementById(id);
 
 const fileInput = $("files");
@@ -253,13 +320,20 @@ function setBusy(value) {
   exportButton.disabled = value || tracks.length === 0;
 }
 
+function updateButtons() {
+  previewButton.disabled = busy || tracks.length === 0;
+  exportButton.disabled = busy || tracks.length === 0;
+}
+
 async function getContext() {
   if (!context || context.state === "closed") {
     context = new AudioContext();
   }
+
   if (context.state === "suspended") {
     await context.resume();
   }
+
   return context;
 }
 
@@ -267,19 +341,21 @@ function stopPlayback(message = "停止しました。") {
   operation++;
 
   for (const source of activeSources) {
-    try { source.stop(); } catch (_) {}
-    try { source.disconnect(); } catch (_) {}
+    try {
+      source.stop();
+    } catch (_) {}
+
+    try {
+      source.disconnect();
+    } catch (_) {}
   }
 
   activeSources = [];
   stopButton.disabled = true;
 
-  if (!busy) setStatus(message);
-}
-
-function updateButtons() {
-  previewButton.disabled = busy || tracks.length === 0;
-  exportButton.disabled = busy || tracks.length === 0;
+  if (!busy) {
+    setStatus(message);
+  }
 }
 
 function makeTrackUI(track) {
@@ -296,9 +372,17 @@ function makeTrackUI(track) {
   const remove = document.createElement("button");
   remove.className = "danger";
   remove.textContent = "削除";
+  remove.setAttribute("aria-label", track.name + "を削除");
+
+  remove.disabled = busy;
+
   remove.addEventListener("click", () => {
+    if (busy) return;
+
     stopPlayback();
+
     tracks = tracks.filter(item => item.id !== track.id);
+
     renderTracks();
     setStatus("素材を削除しました。");
   });
@@ -308,7 +392,14 @@ function makeTrackUI(track) {
   const grid = document.createElement("div");
   grid.className = "grid";
 
-  function addNumberField(labelText, value, min, max, step, callback) {
+  function addNumberField(
+    labelText,
+    value,
+    min,
+    max,
+    step,
+    callback
+  ) {
     const wrapper = document.createElement("div");
     wrapper.className = "field";
 
@@ -321,12 +412,20 @@ function makeTrackUI(track) {
     input.min = min;
     input.max = max;
     input.step = step;
+    input.disabled = busy;
 
     input.addEventListener("change", () => {
+      if (busy) return;
+
       let number = Number(input.value);
-      if (!Number.isFinite(number)) number = value;
+
+      if (!Number.isFinite(number)) {
+        number = value;
+      }
+
       number = Math.min(max, Math.max(min, number));
       input.value = number;
+
       callback(number);
     });
 
@@ -334,25 +433,59 @@ function makeTrackUI(track) {
     grid.append(wrapper);
   }
 
-  addNumberField("開始位置（秒）", track.start, 0, 3600, 0.1,
-    value => track.start = value);
+  addNumberField(
+    "開始位置（秒）",
+    track.start,
+    0,
+    3600,
+    0.1,
+    value => {
+      track.start = value;
+    }
+  );
 
-  addNumberField("音程（半音）", track.pitch, -24, 24, 1,
-    value => track.pitch = value);
+  addNumberField(
+    "音程（半音）",
+    track.pitch,
+    -24,
+    24,
+    1,
+    value => {
+      track.pitch = value;
+    }
+  );
 
-  addNumberField("音量（%）", track.volume, 0, 200, 5,
-    value => track.volume = value / 100);
+  addNumberField(
+    "音量（%）",
+    Math.round(track.volume * 100),
+    0,
+    200,
+    5,
+    value => {
+      track.volume = value / 100;
+    }
+  );
 
-  addNumberField("素材の長さ（秒）",
-    track.buffer.duration.toFixed(2),
-    0.01, 36000, 0.01,
-    () => {});
+  const durationWrapper = document.createElement("div");
+  durationWrapper.className = "field";
+
+  const durationLabel = document.createElement("label");
+  durationLabel.textContent = "素材の長さ（秒）";
+
+  const durationValue = document.createElement("div");
+  durationValue.textContent = track.buffer.duration.toFixed(2) + " 秒";
+  durationValue.style.padding = "9px 0";
+  durationValue.style.color = "var(--text)";
+
+  durationWrapper.append(durationLabel, durationValue);
+  grid.append(durationWrapper);
 
   const canvas = document.createElement("canvas");
   canvas.className = "wave";
   canvas.width = 900;
   canvas.height = 42;
-  canvas.setAttribute("aria-label", "音声波形");
+  canvas.setAttribute("role", "img");
+  canvas.setAttribute("aria-label", track.name + "の音声波形");
 
   const draw = canvas.getContext("2d");
   const samples = track.buffer.getChannelData(0);
@@ -363,14 +496,21 @@ function makeTrackUI(track) {
 
   for (let x = 0; x < canvas.width; x++) {
     const index = x * step;
+
     if (index >= samples.length) break;
 
     let peak = 0;
-    for (let j = 0; j < step && index + j < samples.length; j++) {
+
+    for (
+      let j = 0;
+      j < step && index + j < samples.length;
+      j++
+    ) {
       peak = Math.max(peak, Math.abs(samples[index + j]));
     }
 
     const height = peak * 19;
+
     draw.moveTo(x, 21 - height);
     draw.lineTo(x, 21 + height);
   }
@@ -378,6 +518,7 @@ function makeTrackUI(track) {
   draw.stroke();
 
   article.append(head, grid, canvas);
+
   return article;
 }
 
@@ -400,17 +541,25 @@ function renderTracks() {
 
 fileInput.addEventListener("change", async () => {
   const files = Array.from(fileInput.files || []);
+
   if (files.length === 0) return;
 
   stopPlayback();
   setBusy(true);
+  renderTracks();
   setStatus("音声ファイルを読み込んでいます…");
+
+  let loaded = 0;
+  let failed = 0;
 
   try {
     const audioContext = await getContext();
 
     for (const file of files) {
-      if (!file.type.startsWith("audio/")) continue;
+      if (!file.type.startsWith("audio/")) {
+        failed++;
+        continue;
+      }
 
       try {
         const data = await file.arrayBuffer();
@@ -424,20 +573,33 @@ fileInput.addEventListener("change", async () => {
           pitch: 0,
           volume: 1
         });
+
+        loaded++;
       } catch (error) {
         console.error(error);
-        setStatus(`一部のファイルを読み込めませんでした: ${file.name}`);
+        failed++;
       }
     }
 
     renderTracks();
-    setStatus(`${tracks.length}個の素材を読み込みました。`);
+
+    if (failed > 0) {
+      setStatus(
+        `${loaded}個の素材を読み込みました。` +
+        `読み込めなかったファイル：${failed}個`
+      );
+    } else {
+      setStatus(`${loaded}個の素材を読み込みました。`);
+    }
   } catch (error) {
     console.error(error);
-    setStatus("読み込みに失敗しました。別の音声ファイルをお試しください。");
+    setStatus(
+      "読み込みに失敗しました。ブラウザを更新するか、別の音声ファイルをお試しください。"
+    );
   } finally {
     fileInput.value = "";
     setBusy(false);
+    renderTracks();
   }
 });
 
@@ -457,7 +619,7 @@ function getMixDuration() {
   );
 }
 
-async function createMix(onProgress = () => {}) {
+async function createMix() {
   if (tracks.length === 0) {
     throw new Error("音声素材がありません。");
   }
@@ -469,16 +631,25 @@ async function createMix(onProgress = () => {}) {
 
   const duration = getMixDuration();
 
-  if (!Number.isFinite(duration) || duration <= 0 ||
-      duration > 600) {
-    throw new Error("ミックスの長さは10分以内にしてください。");
+  if (
+    !Number.isFinite(duration) ||
+    duration <= 0 ||
+    duration > 600
+  ) {
+    throw new Error(
+      "ミックスの長さは10分以内にしてください。"
+    );
   }
 
   const frameCount = Math.ceil(duration * sampleRate);
-  const estimatedBytes = frameCount * 4;
+
+  // ステレオの32bit浮動小数点音声を想定した概算。
+  const estimatedBytes = frameCount * 2 * 4;
 
   if (estimatedBytes > 350 * 1024 * 1024) {
-    throw new Error("音声が大きすぎます。素材を短くしてください。");
+    throw new Error(
+      "音声が大きすぎます。素材を短くするか、数を減らしてください。"
+    );
   }
 
   const offline = new OfflineAudioContext(
@@ -491,21 +662,20 @@ async function createMix(onProgress = () => {}) {
   master.gain.value = Number(masterVolume.value);
   master.connect(offline.destination);
 
-  for (let i = 0; i < tracks.length; i++) {
-    const track = tracks[i];
-
+  for (const track of tracks) {
     const source = offline.createBufferSource();
     source.buffer = track.buffer;
-    source.playbackRate.value = Math.pow(2, track.pitch / 12);
+
+    source.playbackRate.value =
+      Math.pow(2, track.pitch / 12);
 
     const gain = offline.createGain();
     gain.gain.value = track.volume;
 
     source.connect(gain);
     gain.connect(master);
-    source.start(track.start);
 
-    onProgress(i + 1, tracks.length);
+    source.start(track.start);
   }
 
   return await offline.startRendering();
@@ -535,8 +705,8 @@ function encodeWav(buffer) {
   view.setUint16(20, 1, true);
   view.setUint16(22, channels, true);
   view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * channels * 2, true);
-  view.setUint16(32, channels * 2, true);
+  view.setUint32(28, sampleRate * channels * bytesPerSample, true);
+  view.setUint16(32, channels * bytesPerSample, true);
   view.setUint16(34, 16, true);
   writeText(36, "data");
   view.setUint32(40, dataSize, true);
@@ -551,6 +721,7 @@ function encodeWav(buffer) {
   for (let i = 0; i < frames; i++) {
     for (const channel of [left, right]) {
       const sample = Math.max(-1, Math.min(1, channel[i]));
+
       const value = sample < 0
         ? sample * 32768
         : sample * 32767;
@@ -564,10 +735,13 @@ function encodeWav(buffer) {
 }
 
 previewButton.addEventListener("click", async () => {
+  if (busy || tracks.length === 0) return;
+
   stopPlayback();
   setBusy(true);
 
   const currentOperation = operation;
+
   setStatus("音声を合成しています…");
 
   try {
@@ -577,6 +751,7 @@ previewButton.addEventListener("click", async () => {
 
     const audioContext = await getContext();
     const source = audioContext.createBufferSource();
+
     source.buffer = mixed;
     source.connect(audioContext.destination);
 
@@ -591,6 +766,7 @@ previewButton.addEventListener("click", async () => {
     };
 
     source.start();
+
     stopButton.disabled = false;
     setStatus("ミックスを再生中です。");
   } catch (error) {
@@ -606,6 +782,8 @@ stopButton.addEventListener("click", () => {
 });
 
 exportButton.addEventListener("click", async () => {
+  if (busy || tracks.length === 0) return;
+
   stopPlayback();
   setBusy(true);
   setStatus("WAVファイルを作成しています…");
@@ -618,10 +796,14 @@ exportButton.addEventListener("click", async () => {
 
     const link = document.createElement("a");
     link.href = url;
-    link.download = "otomad-ai-mix.wav";
+    link.download = "otomad-studio-mix.wav";
+
+    document.body.appendChild(link);
     link.click();
+    link.remove();
 
     setTimeout(() => URL.revokeObjectURL(url), 30000);
+
     setStatus("WAVファイルを書き出しました。");
   } catch (error) {
     console.error(error);
