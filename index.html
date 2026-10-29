@@ -350,9 +350,10 @@ button:disabled{cursor:not-allowed;opacity:.48}
             </select>
           </div>
           <button id="sliceTrackBtn" class="secondary" disabled>選択素材を等分する</button><button id="transientSliceBtn" class="secondary" disabled>立ち上がりで自動刻み</button>
-        <div class="field" style="min-width:180px"><label for="transientSensitivity">自動刻みの感度：<span id="transientSensitivityLabel">5/10</span></label><input id="transientSensitivity" type="range" min="1" max="10" step="1" value="5"></div>
+        <div class="field" style="min-width:180px"><label for="transientSensitivity">自動刻みの感度：<span id="transientSensitivityLabel">5/10</span></label><input id="transientSensitivity" type="range" min="1" max="10" step="1" value="5"></div><button id="transientPreviewBtn" class="secondary" type="button" disabled>刻み候補を確認</button>
         </div>
         <p class="muted">選択した素材の使用範囲を等分し、元の位置から順番に並べた別トラックにします。元の素材は置き換わり、Ctrl+Zで戻せます。</p>
+        <p id="transientPreview" class="muted" aria-live="polite">自動刻みの感度を調整し、「刻み候補を確認」で検出数を確認できます。</p>
         <p class="muted">選んだ素材を指定した拍の間隔で複製します。元の素材は残り、Ctrl+Zで取り消せます。</p>
         <pre id="arrangePreview" class="ai-plan" aria-live="polite" hidden></pre>
         <p class="muted">適用すると、既存トラックの開始位置をBPMに合わせて並べ替えます。音声自体は複製・削除せず、Ctrl+Zで元に戻せます。</p>
@@ -600,6 +601,7 @@ function updateButtons() {
   $("trackCount").textContent = tracks.length + " tracks / 選択 " + selectedCount;
   $("sliceTrackBtn").disabled = busy || !hasTracks;
   $("transientSliceBtn").disabled = busy || !hasTracks;
+  $("transientPreviewBtn").disabled = busy || !hasTracks;
   updateBpmSourceOptions();
   updateRepeatSourceOptions();
   updateNudgeSourceOptions();
@@ -1357,6 +1359,21 @@ $("sliceTrackBtn").addEventListener("click", () => {
   status("「" + source.name + "」を " + count + " 個の素材に等分しました。Ctrl+Zで元に戻せます。");
 });
 
+$("transientPreviewBtn").addEventListener("click", () => {
+  const sourceId = Number($("repeatSource").value);
+  const source = tracks.find(track => track.id === sourceId);
+  if (!source) { status("自動刻みするトラックを選択してください。"); return; }
+  const candidates = detectTransientCandidates(source.buffer, Number($("transientSensitivity").value))
+    .filter(item => item.time >= source.startTrim && item.time < source.end)
+    .map(item => item.time)
+    .filter((time, i, list) => i === 0 || time - list[i-1] >= 0.12);
+  const boundaries = [source.startTrim, ...candidates.filter(time => time > source.startTrim + 0.08).slice(0, 15), source.end]
+    .filter((time, i, list) => i === 0 || time - list[i-1] >= 0.12);
+  const segmentCount = Math.max(0, boundaries.length - 1);
+  $("transientPreview").textContent = segmentCount >= 2
+    ? "検出候補：" + candidates.length + "か所 / 分割予定：" + segmentCount + "個。感度を上げると小さな音の変化も検出しやすくなりますが、不要な区切りも増える場合があります。実行前に再生して確認してください。"
+    : "分割候補が少なすぎます。感度を上げるか、別の素材を選んでください。";
+});
 $("transientSensitivity").addEventListener("input", () => {
   $("transientSensitivityLabel").textContent = $("transientSensitivity").value + "/10";
 });
