@@ -94,16 +94,39 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:25px}
  .effects{grid-template-columns:repeat(2,minmax(0,1fr))}
  header{padding:18px 13px}
 }
+
+/* Usability pass: navigation, focus visibility, and compact screens */
+.skip-link{position:absolute;left:12px;top:-60px;z-index:1000;padding:10px 14px;background:var(--accent);color:#111;border-radius:8px;font-weight:700}
+.skip-link:focus{top:12px}
+.quick-nav{position:sticky;top:0;z-index:50;display:flex;gap:8px;overflow-x:auto;padding:9px max(12px,calc((100vw - 1440px)/2));background:rgba(16,16,20,.94);border-bottom:1px solid var(--border);backdrop-filter:blur(10px);scrollbar-width:thin}
+.quick-nav a{flex:0 0 auto;color:var(--text);text-decoration:none;border:1px solid var(--border);border-radius:999px;padding:7px 11px;font-size:.9rem}
+.quick-nav a:hover,.quick-nav a:focus-visible{border-color:var(--accent);background:var(--panel2)}
+section[id],.panel[id]{scroll-margin-top:76px}
+button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible,canvas:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+button:disabled{cursor:not-allowed;opacity:.48}
+.toolbar{row-gap:8px}
+.toolbar button{max-width:100%;white-space:normal}
+.quick-start{margin:0;padding-left:1.3rem;color:var(--muted);line-height:1.7}
+.quick-start strong{color:var(--text)}
+@media(max-width:600px){
+ .quick-nav{padding:8px 10px}
+ .quick-nav a{font-size:.82rem;padding:7px 10px}
+ .bulk-controls{grid-template-columns:1fr}
+ .toolbar button{flex:1 1 auto}
+}
+
 </style>
 </head>
 <body>
+<a class="skip-link" href="#mainContent">メインコンテンツへ移動</a>
 <header>
   <div class="brand"><span>OtoMAD</span> Studio</div>
   <div class="subtitle">MULTITRACK AUDIO EDITOR / 音MAD制作スタジオ</div>
 </header>
+<nav class="quick-nav" aria-label="ページ内ナビゲーション"><a href="#projectPanel">プロジェクト</a><a href="#timelinePanel">タイムライン</a><a href="#tracksPanel">トラック編集</a><a href="#bpmPanel">BPM・リズム</a><a href="#assistantPanel">制作アシスタント</a><a href="#masterPanel">書き出し設定</a></nav>
 
-<main>
-  <div class="panel">
+<main id="mainContent">
+  <div class="panel" id="projectPanel">
     <div class="row spread">
       <h2>プロジェクト</h2>
       <span class="badge">BROWSER AUDIO ENGINE</span>
@@ -124,11 +147,12 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:25px}
     <div id="status" class="status" role="status" aria-live="polite">
       音声ファイルを追加してください。
     </div>
+    <details style="margin-top:10px"><summary>使い方・基本操作</summary><ol class="quick-start"><li><strong>音声を追加</strong>して、素材を読み込みます。</li><li><strong>トラック編集</strong>でチェックを入れ、音量・位置・グループを調整します。</li><li><strong>BPM・リズム補助</strong>でテンポを設定し、自動配置や自動刻みを試します。</li><li><strong>ミックス再生</strong>で確認し、必要なら「元に戻す」で調整します。</li><li><strong>WAVを書き出す</strong>と完成音声を保存できます。設定ファイルには音声本体は含まれません。</li></ol><p class="muted">ショートカット：Space＝再生/停止、Ctrl+Z＝元に戻す、Ctrl+YまたはCtrl+Shift+Z＝やり直す、Esc＝停止。</p></details>
   </div>
 
   <div class="layout">
     <div>
-      <section class="panel">
+      <section class="panel" id="timelinePanel">
         <div class="row spread">
           <h2>タイムライン</h2>
           <span id="durationLabel" class="stat">0.00 秒</span>
@@ -150,7 +174,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:25px}
         <p class="muted">タイムライン上のトラック帯を左右にドラッグすると開始位置を変更できます。左端の0秒より前には移動できません。トラック一覧ではドラッグして上下の順番を変更できます。</p>
       </section>
 
-      <section class="panel">
+      <section class="panel" id="tracksPanel">
         <div class="row spread">
           <h2>トラック編集</h2>
           <span id="trackCount" class="stat">0 tracks</span>
@@ -218,8 +242,8 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:25px}
     </div>
 
     <aside>
-      <section class="panel">
-        <h2>マスター</h2>
+      <section class="panel" id="masterPanel">
+        <h2>マスター／書き出し設定</h2>
         <div class="field">
           <label for="masterVolume">マスター音量</label>
           <input id="masterVolume" type="range" min="0" max="1.5"
@@ -238,7 +262,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:25px}
         大きなプロジェクトはメモリ不足になる場合があります。</p>
       </section>
 
-      <section class="panel">
+      <section class="panel" id="bpmPanel">
         <h2>BPM・リズム補助</h2>
         <div class="field">
           <label for="bpmInput">プロジェクトBPM</label>
@@ -271,8 +295,8 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:25px}
         無音・声・複雑な音楽では誤差が大きくなる場合があります。</p>
       </section>
 
-      <section class="panel">
-        <h2>AI制作アシスタント（ローカル解析）</h2>
+      <section class="panel" id="assistantPanel">
+        <h2>制作アシスタント（ローカル解析）</h2>
         <p class="muted">素材の長さ・音量・ピークをブラウザ内で解析し、編集計画のたたき台を作ります。生成AIモデルではなく、外部API接続なしで動く補助機能です。</p>
         <div class="field"><label for="aiGoal">作りたい音MADの方向性</label><select id="aiGoal"><option value="rhythm">リズム重視・細かい刻み</option><option value="voice">セリフ中心・聞き取りやすさ</option><option value="chaos">テンポの速いカオス系</option><option value="music">原曲に合わせた音程・リズム</option></select></div>
         <div class="toolbar"><button id="analyzeBtn" class="secondary" disabled>素材を解析して編集案を作成</button><button id="copyPlanBtn" class="secondary" disabled>編集案をコピー</button><button id="exportAnalysisBtn" class="secondary" disabled>解析データをJSON保存</button><button id="autoGainBtn" class="secondary" disabled>選択素材の音量を自動調整</button><button id="trimSilenceBtn" class="secondary" disabled>選択素材の前後の無音をカット</button></div>
