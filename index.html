@@ -239,6 +239,19 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:25px}
             <option value="volume">音量を交互に変える（100% / 60%）</option>
           </select>
         </div>
+        <div class="row" style="margin-top:10px">
+          <div class="field">
+            <label for="sliceCount">切り出す個数</label>
+            <select id="sliceCount">
+              <option value="2">2分割</option>
+              <option value="4" selected>4分割</option>
+              <option value="8">8分割</option>
+              <option value="16">16分割</option>
+            </select>
+          </div>
+          <button id="sliceTrackBtn" class="secondary" disabled>選択素材を等分する</button>
+        </div>
+        <p class="muted">選択した素材の使用範囲を等分し、元の位置から順番に並べた別トラックにします。元の素材は置き換わり、Ctrl+Zで戻せます。</p>
         <p class="muted">選んだ素材を指定した拍の間隔で複製します。元の素材は残り、Ctrl+Zで取り消せます。</p>
         <pre id="arrangePreview" class="ai-plan" aria-live="polite" hidden></pre>
         <p class="muted">適用すると、既存トラックの開始位置をBPMに合わせて並べ替えます。音声自体は複製・削除せず、Ctrl+Zで元に戻せます。</p>
@@ -413,6 +426,7 @@ function updateBpmSourceOptions() {
 }
 
 function updateButtons() {
+  $("sliceTrackBtn").disabled = busy || !hasTracks;
   const hasTracks = tracks.length > 0;
   updateBpmSourceOptions();
   updateRepeatSourceOptions();
@@ -1096,6 +1110,37 @@ function drawTimeline() {
 // BPMや分割単位を変更したら、拍グリッドを即座に更新する。
 $("bpmInput").addEventListener("input", drawTimeline);
 $("snapDivision").addEventListener("change", drawTimeline);
+
+$("sliceTrackBtn").addEventListener("click", () => {
+  if (busy || !tracks.length) return;
+  const sourceId = Number($("repeatSource").value);
+  const index = tracks.findIndex(track => track.id === sourceId);
+  if (index < 0) { status("切り出すトラックを選択してください。"); return; }
+  const source = tracks[index];
+  const count = Number($("sliceCount").value);
+  const duration = getTrackDuration(source);
+  if (!Number.isFinite(duration) || duration < 0.02 * count) {
+    status("素材が短すぎるため、この個数には分割できません。"); return;
+  }
+  recordHistory();
+  const segmentLength = duration / count;
+  const outputSegmentLength = segmentLength / Math.pow(2, source.pitch / 12);
+  const segments = Array.from({ length: count }, (_, i) => ({
+    ...source,
+    id: i === 0 ? source.id : makeId(),
+    name: source.name + " (切片 " + (i + 1) + "/" + count + ")",
+    startTrim: source.startTrim + segmentLength * i,
+    end: i === count - 1 ? source.end : source.startTrim + segmentLength * (i + 1),
+    position: source.position + outputSegmentLength * i,
+    fadeIn: Math.min(source.fadeIn, segmentLength),
+    fadeOut: Math.min(source.fadeOut, segmentLength)
+  }));
+  tracks.splice(index, 1, ...segments);
+  seekOffset = 0;
+  renderTracks();
+  drawTimeline();
+  status("「" + source.name + "」を " + count + " 個の素材に等分しました。Ctrl+Zで元に戻せます。");
+});
 
 $("repeatTrackBtn").addEventListener("click", () => {
   if (busy || !tracks.length) return;
