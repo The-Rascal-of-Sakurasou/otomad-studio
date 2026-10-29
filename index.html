@@ -20,6 +20,15 @@ button,input,select,textarea{font:inherit}
 textarea{width:100%;resize:vertical;background:#111117;color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px;line-height:1.6}
 .help-box{padding:10px 12px;border-left:3px solid var(--accent);background:#22202c;border-radius:0 8px 8px 0}
 .help-box strong{color:#ddd6fe}
+.primary-action-box{padding:12px;margin:12px 0;background:#211f2b;border:1px solid #51436f;border-radius:10px}
+.primary-action-box h3{color:#ddd6fe;margin-bottom:8px}
+.primary-action-box .quick-start{padding-left:1.25rem}
+.advanced-tools{border:1px solid var(--border);border-radius:9px;padding:10px 12px;background:#17171f}
+.advanced-tools>summary{padding:4px 0;color:#ddd6fe;font-size:14px}
+.advanced-tools[open]>summary{margin-bottom:10px}
+.advanced-tools .field{margin-top:10px}
+#assistantPanel #autoGenerateBtn{font-size:1rem;padding:11px 15px}
+#assistantPanel .toolbar{margin-top:10px}
 .section-intro{margin:0 0 12px;color:var(--muted);font-size:13px;line-height:1.75}
 .step-guide{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:12px 0 4px}
 .step-guide a{display:block;padding:10px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);text-decoration:none;font-size:12px;line-height:1.55}
@@ -146,7 +155,7 @@ button:disabled{cursor:not-allowed;opacity:.48}
 <main id="mainContent">
   <div class="panel" id="gettingStartedPanel">
     <h2>はじめての方へ｜基本の4ステップ</h2>
-    <p class="section-intro">まずは音声を読み込み、再生して確認するところから始めてください。専門用語が分からなくても、下の順番で操作できます。</p>
+    <p class="section-intro">まずは音声を読み込み、再生して確認するところから始めてください。専門用語が分からなくても、下の順番で操作できます。</p><p class="muted help-box">最短ルート：<strong>音声を追加 → 方向性を選ぶ → 自動生成 → 再生して確認 → WAVで保存</strong>。細かい設定は、必要になってから変更すれば大丈夫です。</p>
     <div class="step-guide">
       <a href="#projectPanel"><strong>1. 音声を追加</strong>編集したい音声ファイルを読み込みます。</a>
       <a href="#timelinePanel"><strong>2. 位置を調整</strong>音声の帯を左右に動かしてタイミングを合わせます。</a>
@@ -335,8 +344,16 @@ button:disabled{cursor:not-allowed;opacity:.48}
           <p class="muted">対応キーワード・BPM・拍の分割・音程・左右パンを読み取り、素材内の音量ピークも配置やクリップ音量に反映します。例：「BPM 150、16分刻み、左右交互、セリフ中心」。文章の完全な意味理解や音声内容の自動認識には対応していません。</p>
           <div class="toolbar"><button id="clearPromptBtn" class="secondary" type="button">プロンプトを消去</button><button id="applyPromptBtn" class="secondary" type="button">指示を設定に反映</button></div>
         </div>
-        <div class="toolbar"><button id="autoGenerateBtn" class="green" disabled>プロンプトで音MADを生成</button><button id="analyzeBtn" class="secondary" disabled>素材を解析して編集案を作成</button><button id="copyPlanBtn" class="secondary" disabled>編集案をコピー</button><button id="exportAnalysisBtn" class="secondary" disabled>解析データをJSON保存</button><button id="autoGainBtn" class="secondary" disabled>選択素材の音量を自動調整</button><button id="trimSilenceBtn" class="secondary" disabled>選択素材の前後の無音をカット</button><button id="prepareSelectedBtn" class="primary" disabled>選択素材をまとめて整える</button></div>
-        <div class="field" style="margin-top:8px">
+        <div class="primary-action-box">
+          <h3>まずはこの3つを使えばOK</h3>
+          <ol class="quick-start"><li>音声を追加したあと、作りたい方向性を選びます。</li><li>下の欄に希望を書き、「プロンプトで音MADを生成」を押します。</li><li>「再生して確認」で聴き、気に入らなければCtrl+Zで戻します。</li></ol>
+        </div>
+                <div class="toolbar"><button id="autoGenerateBtn" class="green" disabled>プロンプトで音MADを生成</button><button id="analyzeBtn" class="secondary" disabled>素材を解析して編集案を作成</button><button id="copyPlanBtn" class="secondary" disabled>編集案をコピー</button><button id="exportAnalysisBtn" class="secondary" disabled>解析データをJSON保存</button><button id="autoGainBtn" class="secondary" disabled>選択素材の音量を自動調整</button><button id="trimSilenceBtn" class="secondary" disabled>選択素材の前後の無音をカット</button><button id="prepareSelectedBtn" class="primary" disabled>選択素材をまとめて整える</button></div>
+        <p class="muted">補助機能：<strong>素材を解析</strong>は編集案を作るだけ、<strong>音量を自動調整</strong>と<strong>無音をカット</strong>は選択した素材に処理を加えます。迷ったら、まず自動生成だけ試してください。</p>
+        <details class="advanced-tools" style="margin-top:14px">
+          <summary>細かい編集機能（慣れた方向け）</summary>
+          <p class="muted">基本の自動生成だけなら、ここは変更しなくても使えます。素材の並べ替え、拍に合わせた複製・分割などを細かく指定したいときに開いてください。</p>
+          <div class="field" style="margin-top:8px">
           <label for="arrangeMode">素材の並べ方</label>
           <select id="arrangeMode">
             <option value="rhythm">細かい刻み（短い間隔で重ねる）</option>
@@ -394,6 +411,7 @@ button:disabled{cursor:not-allowed;opacity:.48}
         <p id="transientPreview" class="muted" aria-live="polite">自動刻みの感度を調整し、「刻み候補を確認」で検出数を確認できます。</p>
         <div id="transientCandidateJumps" class="toolbar" aria-label="検出位置へ移動" style="margin-top:8px"></div>
         <p class="muted">選んだ素材を指定した拍の間隔で複製します。元の素材は残り、Ctrl+Zで取り消せます。</p>
+        </details>
         <pre id="arrangePreview" class="ai-plan" aria-live="polite" hidden></pre>
         <p class="muted">適用すると、既存トラックの開始位置をBPMに合わせて並べ替えます。音声自体は複製・削除せず、Ctrl+Zで元に戻せます。</p>
         <pre id="aiPlan" class="ai-plan" aria-live="polite">音声素材を追加すると、解析して編集案を作成できます。</pre>
