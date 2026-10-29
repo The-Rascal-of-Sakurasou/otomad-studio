@@ -306,9 +306,9 @@ button:disabled{cursor:not-allowed;opacity:.48}
 
       <section class="panel" id="assistantPanel">
         <h2>制作アシスタント（ローカル解析）</h2>
-        <p class="muted">素材の長さ・音量・ピークをブラウザ内で解析し、編集計画のたたき台を作ります。生成AIモデルではなく、外部API接続なしで動く補助機能です。</p>
+        <p class="muted">素材をブラウザ内で解析し、立ち上がり検出・拍同期・短いクリップの配置から自動構成を作成します。外部API不要のルールベース生成で、生成AIモデルによる意味理解ではありません。元のトラックはミュートして残し、Ctrl+Zで取り消せます。</p>
         <div class="field"><label for="aiGoal">作りたい音MADの方向性</label><select id="aiGoal"><option value="rhythm">リズム重視・細かい刻み</option><option value="voice">セリフ中心・聞き取りやすさ</option><option value="chaos">テンポの速いカオス系</option><option value="music">原曲に合わせた音程・リズム</option></select></div>
-        <div class="toolbar"><button id="analyzeBtn" class="secondary" disabled>素材を解析して編集案を作成</button><button id="copyPlanBtn" class="secondary" disabled>編集案をコピー</button><button id="exportAnalysisBtn" class="secondary" disabled>解析データをJSON保存</button><button id="autoGainBtn" class="secondary" disabled>選択素材の音量を自動調整</button><button id="trimSilenceBtn" class="secondary" disabled>選択素材の前後の無音をカット</button><button id="prepareSelectedBtn" class="primary" disabled>選択素材をまとめて整える</button></div>
+        <div class="toolbar"><button id="autoGenerateBtn" class="green" disabled>自動音MADを生成</button><button id="analyzeBtn" class="secondary" disabled>素材を解析して編集案を作成</button><button id="copyPlanBtn" class="secondary" disabled>編集案をコピー</button><button id="exportAnalysisBtn" class="secondary" disabled>解析データをJSON保存</button><button id="autoGainBtn" class="secondary" disabled>選択素材の音量を自動調整</button><button id="trimSilenceBtn" class="secondary" disabled>選択素材の前後の無音をカット</button><button id="prepareSelectedBtn" class="primary" disabled>選択素材をまとめて整える</button></div>
         <div class="field" style="margin-top:8px">
           <label for="arrangeMode">自動配置モード</label>
           <select id="arrangeMode">
@@ -627,6 +627,7 @@ function updateButtons() {
   exportBtn.disabled = busy || !hasTracks;
   $("detectBpmBtn").disabled = busy || !hasTracks;
   $("analyzeBtn").disabled = busy || !hasTracks;
+  $("autoGenerateBtn").disabled = busy || !hasTracks;
   $("arrangeBtn").disabled = busy || tracks.length < 2;
   $("onsetFromAnalysisBtn").disabled = busy || tracks.length < 2;
   $("previewArrangeBtn").disabled = busy || tracks.length < 2;
@@ -2595,6 +2596,88 @@ function detectTransientCandidates(buffer, sensitivity = 5) {
 }
 
 let lastAiPlan = "";
+
+// ローカル自動構成生成：立ち上がりを検出して短いクリップを拍グリッドに配置する。
+$("autoGenerateBtn").addEventListener("click", () => {
+  if (busy || !tracks.length) return;
+  const sources = tracks.filter(track => !track.muted);
+  if (!sources.length) {
+    status("ミュートされていない素材がありません。元トラックのミュートを解除してください。");
+    return;
+  }
+  const bpm = clamp(Number(bpmInput.value) || 120, 40, 240);
+  const beat = 60 / bpm;
+  const division = Math.max(1, Number($("snapDivision").value) || 4);
+  const interval = beat / division;
+  const goal = $("aiGoal").value;
+  const sensitivity = Number($("transientSensitivity").value) || 5;
+  const maxClips = goal === "chaos" ? 64 : goal === "voice" ? 28 : 48;
+  const generated = [];
+  const buckets = sources.map(source => {
+    const candidates = detectTransientCandidates(source.buffer, sensitivity)
+      .filter(item => item.time >= source.startTrim && item.time < source.end)
+      .sort((a, b) => b.strength - a.strength)
+      .slice(0, goal === "voice" ? 6 : 12)
+      .sort((a, b) => a.time - b.time);
+    return { source, items: candidates.length ? candidates : [{ time: source.startTrim, strength: 0.01 }] };
+  });
+  if (!buckets.length) {
+    status("素材から配置候補を検出できませんでした。");
+    return;
+  }
+
+  // 素材を交互に採用し、生成クリップ数を制限する。
+  let round = 0;
+  while (generated.length < maxClips && buckets.some(bucket => round < bucket.items.length)) {
+    for (const bucket of buckets) {
+      if (generated.length >= maxClips) break;
+      const candidate = bucket.items[round];
+      if (!candidate) continue;
+      const source = bucket.source;
+      const start = clamp(candidate.time, source.startTrim, Math.max(source.startTrim, source.end - 0.04));
+      const clipLength = Math.min(source.end - start, Math.max(0.06, interval * (goal === "chaos" ? 1.15 : 1.8)));
+      if (clipLength < 0.04) continue;
+      const index = generated.length;
+      generated.push({
+        ...source,
+        id: makeId(),
+        name: "自動生成 " + String(index + 1).padStart(2, "0") + " · " + source.name,
+        position: index * interval,
+        startTrim: start,
+        end: start + clipLength,
+        volume: source.volume * (goal === "voice" ? 0.72 : (index % 4 === 3 ? 0.58 : 0.82)),
+        pitch: goal === "chaos" && index % 4 === 3
+          ? clamp(source.pitch + (index % 2 ? 5 : -5), -24, 24)
+          : source.pitch,
+        muted: false,
+        solo: false,
+        fadeIn: Math.min(source.fadeIn, clipLength * 0.15),
+        fadeOut: Math.min(source.fadeOut, clipLength * 0.15),
+        group: "AI自動生成"
+      });
+    }
+    round++;
+  }
+  if (!generated.length) {
+    status("生成できるクリップがありません。素材の長さやトリミング範囲を確認してください。");
+    return;
+  }
+
+  recordHistory();
+  stopPlayback();
+  sources.forEach(source => { source.muted = true; });
+  tracks.push(...generated);
+  selectedTrackIds.clear();
+  generated.forEach(track => selectedTrackIds.add(track.id));
+  seekOffset = 0;
+  renderTracks();
+  drawTimeline();
+  updateButtons();
+  status("自動構成を生成しました：" + generated.length + "クリップ、BPM " + bpm +
+    "、配置間隔 " + interval.toFixed(3) +
+    "秒。元素材はミュートして保持しています。再生して確認し、Ctrl+Zで全体を取り消せます。");
+});
+
 $("trimSilenceBtn").addEventListener("click", () => {
   if (busy) return;
   const targets = tracks.filter(track => selectedTrackIds.has(track.id));
