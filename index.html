@@ -573,6 +573,7 @@ function updateButtons() {
   $("bulkSoloBtn").textContent = selectedCount > 0 && tracks.filter(t => selectedTrackIds.has(t.id)).every(t => t.solo) ? "選択のソロ解除" : "選択をソロ";
   $("trackCount").textContent = tracks.length + " tracks / 選択 " + selectedCount;
   $("sliceTrackBtn").disabled = busy || !hasTracks;
+  $("transientSliceBtn").disabled = busy || !hasTracks;
   updateBpmSourceOptions();
   updateRepeatSourceOptions();
   updateNudgeSourceOptions();
