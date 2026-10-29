@@ -283,6 +283,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:25px}
             <option value="sequence">順番に配置（前の素材の後ろへ）</option>
             <option value="stagger">交互配置（拍ごとにずらす）</option>
             <option value="reverse">逆順に並べる（素材の順番を反転）</option>
+            <option value="onset">音の立ち上がりを拍に同期</option>
           </select>
         </div>
         <div class="field" style="margin-top:8px">
@@ -1367,6 +1368,17 @@ $("repeatTrackBtn").addEventListener("click", () => {
   status("「" + source.name + "」を " + count + " 回、" + interval.toFixed(3) + " 秒間隔で複製しました。Ctrl+Zで取り消せます。");
 });
 
+function getFirstTransientOffset(track) {
+  const candidates = detectTransientCandidates(track.buffer)
+    .filter(item => item.time >= track.startTrim && item.time <= track.end);
+  if (!candidates.length) return 0;
+  return (candidates[0].time - track.startTrim) / Math.pow(2, track.pitch / 12);
+}
+function getOnsetAlignedPosition(track, interval) {
+  const offset = getFirstTransientOffset(track);
+  return Math.max(0, Math.round(offset / interval) * interval - offset);
+}
+
 function getArrangeTargetTracks(scope) {
   if (scope === "selected") return tracks.filter(track => selectedTrackIds.has(track.id));
   if (scope === "group") {
@@ -1398,6 +1410,8 @@ $("previewArrangeBtn").addEventListener("click", () => {
       }
     } else if (mode === "stagger") {
       position = (index % 2) * beat + Math.floor(index / 2) * interval;
+    } else if (mode === "onset") {
+      position = getOnsetAlignedPosition(track, interval);
     } else {
       position = index * interval;
     }
@@ -1447,6 +1461,8 @@ $("arrangeBtn").addEventListener("click", () => {
         cursor = track.position + getTrackOutputDuration(track);
       } else if (mode === "stagger") {
         track.position = (index % 2) * beat + Math.floor(index / 2) * interval;
+      } else if (mode === "onset") {
+        track.position = getOnsetAlignedPosition(track, interval);
       } else {
         track.position = index * interval;
       }
@@ -1455,7 +1471,7 @@ $("arrangeBtn").addEventListener("click", () => {
   seekOffset = 0;
   renderTracks();
   drawTimeline();
-  const modeLabel = mode === "sequence" ? "順番に配置" : mode === "reverse" ? "逆順配置" : mode === "stagger" ? "交互配置" : "細かい刻み";
+  const modeLabel = mode === "sequence" ? "順番に配置" : mode === "reverse" ? "逆順配置" : mode === "onset" ? "立ち上がり同期" : mode === "stagger" ? "交互配置" : "細かい刻み";
   status(modeLabel + "モードで " + targetTracks.length + " トラックを配置しました。Ctrl+Zで元に戻せます。");
 });
 
