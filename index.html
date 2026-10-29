@@ -311,7 +311,7 @@ button:disabled{cursor:not-allowed;opacity:.48}
         <div class="field" style="margin-top:10px">
           <label for="generationPrompt">プロンプト（作りたい音MADを文章で指定）</label>
           <textarea id="generationPrompt" rows="3" maxlength="500" placeholder="例：BPM 150で、セリフ中心。細かく刻んでテンポの速いカオス系にする"></textarea>
-          <p class="muted">対応キーワード・BPM・拍の分割・音程・左右パンを読み取り、配置に反映します。例：「BPM 150、16分刻み、左右交互、セリフ中心」。文章の完全な意味理解や音声内容の自動認識には対応していません。</p>
+          <p class="muted">対応キーワード・BPM・拍の分割・音程・左右パンを読み取り、素材内の音量ピークも配置やクリップ音量に反映します。例：「BPM 150、16分刻み、左右交互、セリフ中心」。文章の完全な意味理解や音声内容の自動認識には対応していません。</p>
           <div class="toolbar"><button id="clearPromptBtn" class="secondary" type="button">プロンプトを消去</button><button id="applyPromptBtn" class="secondary" type="button">指示を設定に反映</button></div>
         </div>
         <div class="toolbar"><button id="autoGenerateBtn" class="green" disabled>プロンプトで音MADを生成</button><button id="analyzeBtn" class="secondary" disabled>素材を解析して編集案を作成</button><button id="copyPlanBtn" class="secondary" disabled>編集案をコピー</button><button id="exportAnalysisBtn" class="secondary" disabled>解析データをJSON保存</button><button id="autoGainBtn" class="secondary" disabled>選択素材の音量を自動調整</button><button id="trimSilenceBtn" class="secondary" disabled>選択素材の前後の無音をカット</button><button id="prepareSelectedBtn" class="primary" disabled>選択素材をまとめて整える</button></div>
@@ -2707,6 +2707,8 @@ $("autoGenerateBtn").addEventListener("click", () => {
       const candidate = bucket.items[round];
       if (!candidate) continue;
       const source = bucket.source;
+      const maxStrength = Math.max(0.0001, ...bucket.items.map(item => item.strength || 0));
+      const peakLevel = clamp((candidate.strength || 0) / maxStrength, 0.35, 1);
       const start = clamp(candidate.time, source.startTrim, Math.max(source.startTrim, source.end - 0.04));
       const desiredLength = goal === "voice"
         ? beat * 0.62
@@ -2731,7 +2733,9 @@ $("autoGenerateBtn").addEventListener("click", () => {
         position,
         startTrim: start,
         end: start + clipLength,
-        volume: source.volume * (goal === "voice" ? 0.72 : (index % 4 === 3 ? 0.58 : 0.82)),
+        // 検出したピークの強さを音量へ反映し、弱い音と強い音に差を付ける。
+        volume: clamp(source.volume * peakLevel *
+          (goal === "voice" ? 0.9 : (index % 4 === 3 ? 0.58 : 0.82)), 0.05, 2),
         pitch: clamp(source.pitch + profile.pitchShift + (goal === "chaos" && index % 4 === 3
           ? (index % 2 ? 5 : -5) : 0), -24, 24),
         pan: profile.panMode === "center" ? 0
