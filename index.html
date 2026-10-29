@@ -1499,81 +1499,57 @@ exportBtn.addEventListener("click", async () => {
 });
 
 function estimateBpm(buffer) {
-  const data = buffer.getChannelData(0);
+  // 20msごとのRMSを全チャンネルから計算し、音の立ち上がりを解析する。
   const sampleRate = buffer.sampleRate;
-
-  // 1区間10msごとの音量包絡を作成
-  const hop = Math.max(1, Math.floor(sampleRate * 0.01));
-  const envelope = [];
-
-  for (let i = 0; i < data.length; i += hop) {
-    let energy = 0;
-    const end = Math.min(data.length, i + hop);
-
-    for (let j = i; j < end; j++) {
-      energy += data[j] * data[j];
-    }
-
-    envelope.push(Math.sqrt(energy / Math.max(1, end - i)));
+  const hop = Math.max(1, Math.floor(sampleRate * 0.02));
+  const channels = Array.from({ length: buffer.numberOfChannels }, (_, i) => buffer.getChannelData(i));
+  const frameCount = Math.ceil(buffer.length / hop);
+  if (frameCount < 50) return null;
+  const envelope = new Float32Array(frameCount);
+  for (let frame = 0; frame < frameCount; frame++) {
+    const begin = frame * hop, finish = Math.min(buffer.length, begin + hop);
+    let energy = 0, count = 0;
+    for (const data of channels) for (let i = begin; i < finish; i++) { energy += data[i] * data[i]; count++; }
+    envelope[frame] = Math.sqrt(energy / Math.max(1, count));
   }
-
-  if (envelope.length < 100) return null;
-
-  const mean = envelope.reduce((a, b) => a + b, 0) / envelope.length;
-  const signal = envelope.map(v => Math.max(0, v - mean));
-
-  const minLag = Math.floor(60 / 200 / 0.01);
-  const maxLag = Math.ceil(60 / 50 / 0.01);
-
-  let bestLag = 0;
-  let bestScore = -Infinity;
-
+  const onset = new Float32Array(frameCount);
+  let mean = 0;
+  for (let i = 1; i < frameCount; i++) { onset[i] = Math.max(0, envelope[i] - envelope[i - 1]); mean += onset[i]; }
+  mean /= Math.max(1, frameCount - 1);
+  if (mean < 1e-6) return null;
+  for (let i = 0; i < frameCount; i++) onset[i] = Math.max(0, onset[i] - mean * 0.25);
+  const frameSeconds = hop / sampleRate;
+  const minLag = Math.max(1, Math.floor(60 / 200 / frameSeconds));
+  const maxLag = Math.min(frameCount - 2, Math.ceil(60 / 50 / frameSeconds));
+  let bestLag = 0, bestScore = -Infinity;
   for (let lag = minLag; lag <= maxLag; lag++) {
-    let score = 0;
-
-    for (let i = lag; i < signal.length; i++) {
-      score += signal[i] * signal[i - lag];
+    let score = 0, normA = 0, normB = 0;
+    for (let i = lag; i < frameCount; i++) {
+      const a = onset[i], b = onset[i - lag];
+      score += a * b; normA += a * a; normB += b * b;
     }
-
-    if (score > bestScore) {
-      bestScore = score;
-      bestLag = lag;
-    }
+    score /= Math.sqrt(normA * normB) || 1;
+    if (score > bestScore) { bestScore = score; bestLag = lag; }
   }
-
   if (!bestLag || bestScore <= 0) return null;
-
-  let bpm = 60 / (bestLag * 0.01);
-
-  // オクターブ違いの候補はあり得るため、範囲内に調整
+  let bpm = 60 / (bestLag * frameSeconds);
   while (bpm < 70) bpm *= 2;
   while (bpm > 180) bpm /= 2;
-
-  return Math.round(bpm);
+  return { bpm: Math.round(bpm), confidence: Math.max(0, Math.min(1, bestScore)) };
 }
 
 $("detectBpmBtn").addEventListener("click", () => {
   if (!tracks.length || busy) return;
-
-  const track = tracks[0];
-  status("先頭トラックからBPMを推定しています…");
-
+  status("先頭トラックのリズムを解析しています…");
   try {
-    const bpm = estimateBpm(track.buffer);
-
-    if (!bpm) {
-      status("BPMを推定できませんでした。別の素材をお試しください。");
-      return;
-    }
-
-    bpmInput.value = bpm;
-    status(`推定BPM：${bpm}。音声によっては実際のテンポと異なる場合があります。`);
-  } catch (error) {
-    console.error(error);
-    status("BPM推定に失敗しました。");
-  }
+    const result = estimateBpm(tracks[0].buffer);
+    if (!result) { status("BPMを推定できませんでした。打音が明瞭な素材をお試しください。"); return; }
+    bpmInput.value = result.bpm;
+    drawTimeline();
+    const label = result.confidence >= 0.35 ? "比較的明瞭" : result.confidence >= 0.15 ? "不確か" : "かなり不確か";
+    status("推定BPM：" + result.bpm + "（リズム相関：" + label + "）。推定値なので、曲に合わせて確認してください。");
+  } catch (error) { console.error(error); status("BPM推定に失敗しました。"); }
 });
-
 $("snapBtn").addEventListener("click", () => {
   const bpm = Number(bpmInput.value);
   const division = Number($("snapDivision").value);
