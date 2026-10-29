@@ -1040,7 +1040,7 @@ function animatePlayhead() {
   canvas.addEventListener("pointerdown", event => {
     if (busy || event.button !== 0 || !tracks.length) return;
     const p = point(event);
-    const duration = Math.max(getMixDuration(), 10);
+    const duration = Math.max(1, Math.max(getMixDuration(), 10) / timelineZoom);
     const left = 55;
     const right = canvas.width - 15;
     const scale = (right - left) / duration;
