@@ -2336,7 +2336,7 @@ function analyzeAudioBuffer(buffer) {
   if (quietStart !== null && buffer.duration - quietStart >= 0.25) {
     quietRegions.push({start:quietStart,end:buffer.duration});
   }
-  return {duration:buffer.duration,rms:Math.sqrt(sumSquares/Math.max(1,frames)),peak:peak,quietRatio:quietFrames/Math.max(1,frames),zeroCrossingRate:crossings/Math.max(1,crossingPairs),stereoBalance:right?((Math.sqrt(rightEnergy)-Math.sqrt(leftEnergy))/(Math.sqrt(rightEnergy)+Math.sqrt(leftEnergy)+1e-9)):null,quietRegions:quietRegions};
+  return {duration:buffer.duration,rms:Math.sqrt(sumSquares/Math.max(1,frames)),peak:peak,crestFactor:peak/Math.max(1e-9,Math.sqrt(sumSquares/Math.max(1,frames))),quietRatio:quietFrames/Math.max(1,frames),zeroCrossingRate:crossings/Math.max(1,crossingPairs),stereoBalance:right?((Math.sqrt(rightEnergy)-Math.sqrt(leftEnergy))/(Math.sqrt(rightEnergy)+Math.sqrt(leftEnergy)+1e-9)):null,quietRegions:quietRegions};
 }
 function detectTransientCandidates(buffer) {
   const step = Math.max(1, Math.floor(buffer.sampleRate * 0.02));
@@ -2406,6 +2406,10 @@ $("analyzeBtn").addEventListener("click", () => {
     lines.push((index+1) + ". " + track.name);
     lines.push("   長さ " + m.duration.toFixed(2) + "秒 / RMS " + m.rms.toFixed(3) + " / 最大ピーク " + m.peak.toFixed(3) + " / 低音量区間 約" + Math.round(m.quietRatio*100) + "%");
     lines.push("   音色の粗い指標：ゼロ交差率 " + m.zeroCrossingRate.toFixed(3) + (m.stereoBalance === null ? " / モノラル素材" : " / 左右バランス " + (m.stereoBalance > 0.08 ? "右寄り" : m.stereoBalance < -0.08 ? "左寄り" : "中央付近")));
+    if (m.peak >= 0.98) lines.push("   注意：ピークが非常に高いため、重ねると音割れする可能性があります。");
+    if (m.rms < 0.025) lines.push("   注意：平均音量が小さめです。必要なら素材音量を上げて比較してください。");
+    if (m.quietRatio > 0.45) lines.push("   編集候補：低音量区間が多いため、無音候補を確認してトリミングできる可能性があります。");
+    if (m.crestFactor > 8 && m.peak > 0.15) lines.push("   編集候補：瞬間ピークと平均音量の差が大きめです。コンプレッサー相当の処理や音量調整を検討してください。");
     lines.push("   分類の目安：" + category);
     const regions = m.quietRegions
       .filter(region => region.end - region.start >= 0.35 &&
@@ -2453,6 +2457,7 @@ $("analyzeBtn").addEventListener("click", () => {
         volume: track.volume, pan: track.pan, muted: track.muted, solo: track.solo, group: track.group,
         rms: Number(metrics.rms.toFixed(5)), peak: Number(metrics.peak.toFixed(5)),
         zeroCrossingRate: Number(metrics.zeroCrossingRate.toFixed(5)),
+        crestFactor: Number(metrics.crestFactor.toFixed(5)),
         stereoBalance: metrics.stereoBalance === null ? null : Number(metrics.stereoBalance.toFixed(5)),
         quietRatio: Number(metrics.quietRatio.toFixed(4)),
         quietRegions: metrics.quietRegions.filter(region => region.end-region.start >= 0.35)
