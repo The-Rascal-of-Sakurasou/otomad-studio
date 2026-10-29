@@ -191,6 +191,23 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:25px}
             <button id="bulkAlignBtn" class="secondary" type="button" disabled>グリッドに整列</button>
           </div>
         </div>
+        <div class="bulk-controls">
+          <div class="field">
+            <label for="groupName">選択トラックのグループ名</label>
+            <div class="row">
+              <input id="groupName" type="text" maxlength="40" placeholder="例：ボーカル素材" disabled>
+              <button id="groupAssignBtn" class="secondary" type="button" disabled>グループ設定</button>
+            </div>
+          </div>
+          <div class="field">
+            <label for="groupFilter">グループの選択</label>
+            <div class="row">
+              <select id="groupFilter" disabled><option value="">すべてのトラック</option></select>
+              <button id="groupSelectBtn" class="secondary" type="button" disabled>グループを選択</button>
+            </div>
+          </div>
+        </div>
+        <p class="muted">グループはトラックを整理して一括選択するための機能です。グループ設定はCtrl+Zで取り消せます。</p>
         <p class="muted">チェックしたトラックにまとめて操作できます。拍単位の移動はBPMと「拍の分割」の設定に従います。削除や位置変更はCtrl+Zで取り消せます。</p>
         <div id="trackList">
           <div class="empty">音声ファイルを追加すると、ここにトラックが表示されます。</div>
@@ -488,6 +505,27 @@ function updateBpmSourceOptions() {
   else if (tracks.length) select.value = String(tracks[0].id);
 }
 
+function updateGroupFilterOptions() {
+  const select = $("groupFilter");
+  if (!select) return;
+  const previous = select.value;
+  const groups = [...new Set(tracks.map(track => (track.group || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ja"));
+  select.replaceChildren();
+  const all = document.createElement("option");
+  all.value = "";
+  all.textContent = "すべてのトラック";
+  select.append(all);
+  groups.forEach(group => {
+    const option = document.createElement("option");
+    option.value = group;
+    option.textContent = group;
+    select.append(option);
+  });
+  select.value = groups.includes(previous) ? previous : "";
+  select.disabled = busy || groups.length === 0;
+  $("groupSelectBtn").disabled = busy || !select.value;
+}
+
 function updateButtons() {
   const hasTracks = tracks.length > 0;
   for (const id of Array.from(selectedTrackIds)) {
@@ -506,6 +544,9 @@ function updateButtons() {
   $("bulkBeatSteps").disabled = busy || selectedCount === 0;
   $("bulkBeatApplyBtn").disabled = busy || selectedCount === 0;
   $("bulkAlignBtn").disabled = busy || selectedCount === 0;
+  $("groupName").disabled = busy || selectedCount === 0;
+  $("groupAssignBtn").disabled = busy || selectedCount === 0;
+  updateGroupFilterOptions();
   $("bulkMuteBtn").textContent = selectedCount > 0 && tracks.filter(t => selectedTrackIds.has(t.id)).every(t => t.muted) ? "選択のミュート解除" : "選択をミュート";
   $("bulkSoloBtn").textContent = selectedCount > 0 && tracks.filter(t => selectedTrackIds.has(t.id)).every(t => t.solo) ? "選択のソロ解除" : "選択をソロ";
   $("trackCount").textContent = tracks.length + " tracks / 選択 " + selectedCount;
@@ -568,7 +609,8 @@ function createTrack(name, buffer) {
     delay: 0,
     reverb: 0,
     muted: false,
-    solo: false
+    solo: false,
+    group: ""
   };
 }
 
@@ -2028,6 +2070,33 @@ $("bulkVolumeApplyBtn").addEventListener("click", () => {
   renderTracks();
   status(selectedTrackIds.size + "個のトラックの音量を" + value + "%に設定しました。");
 });
+$("groupAssignBtn").addEventListener("click", () => {
+  if (busy || !selectedTrackIds.size) return;
+  const group = $("groupName").value.trim();
+  recordHistory();
+  tracks.forEach(track => {
+    if (selectedTrackIds.has(track.id)) track.group = group;
+  });
+  renderTracks();
+  updateButtons();
+  status(group ? selectedTrackIds.size + "個のトラックを「" + group + "」グループに設定しました。" : "選択トラックのグループ設定を解除しました。");
+});
+$("groupFilter").addEventListener("change", () => {
+  $("groupSelectBtn").disabled = busy || !$("groupFilter").value;
+});
+$("groupSelectBtn").addEventListener("click", () => {
+  if (busy) return;
+  const group = $("groupFilter").value;
+  if (!group) return;
+  selectedTrackIds.clear();
+  tracks.forEach(track => {
+    if ((track.group || "") === group) selectedTrackIds.add(track.id);
+  });
+  renderTracks();
+  updateButtons();
+  status("「" + group + "」グループのトラックを" + selectedTrackIds.size + "個選択しました。");
+});
+
 $("bulkBeatApplyBtn").addEventListener("click", () => {
   if (busy || !selectedTrackIds.size) return;
   const steps = Number($("bulkBeatSteps").value);
