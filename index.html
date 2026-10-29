@@ -282,6 +282,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:25px}
             <option value="rhythm">細かい刻み（短い間隔で重ねる）</option>
             <option value="sequence">順番に配置（前の素材の後ろへ）</option>
             <option value="stagger">交互配置（拍ごとにずらす）</option>
+            <option value="reverse">逆順に並べる（素材の順番を反転）</option>
           </select>
         </div>
         <div class="toolbar" style="margin-top:8px"><button id="previewArrangeBtn" class="secondary" disabled>配置案をプレビュー</button><button id="arrangeBtn" class="secondary" disabled>リズム配置案を適用</button></div>
@@ -1368,16 +1369,28 @@ $("previewArrangeBtn").addEventListener("click", () => {
   let cursor = 0;
   const rows = tracks.map((track, index) => {
     let position;
-    if (mode === "sequence") {
-      position = Math.ceil((cursor - 0.000001) / interval) * interval;
-      cursor = position + getTrackOutputDuration(track);
+    if (mode === "sequence" || mode === "reverse") {
+      const orderedIndex = mode === "reverse" ? tracks.length - 1 - index : index;
+      if (mode === "reverse") {
+        position = null;
+      } else {
+        position = Math.ceil((cursor - 0.000001) / interval) * interval;
+        cursor = position + getTrackOutputDuration(track);
+      }
     } else if (mode === "stagger") {
       position = (index % 2) * beat + Math.floor(index / 2) * interval;
     } else {
       position = index * interval;
     }
-    return { name: track.name, position, duration: getTrackOutputDuration(track) };
+    return { track, name: track.name, position, duration: getTrackOutputDuration(track), index };
   });
+  if (mode === "reverse") {
+    let reverseCursor = 0;
+    [...rows].sort((a, b) => b.index - a.index).forEach(row => {
+      row.position = Math.ceil((reverseCursor - 0.000001) / interval) * interval;
+      reverseCursor = row.position + row.duration;
+    });
+  }
   const total = Math.max(...rows.map(row => row.position + row.duration));
   const preview = $("arrangePreview");
   preview.hidden = false;
@@ -1397,20 +1410,27 @@ $("arrangeBtn").addEventListener("click", () => {
   const mode = $("arrangeMode").value;
   recordHistory();
   let cursor = 0;
-  tracks.forEach((track, index) => {
-    if (mode === "sequence") {
+  if (mode === "reverse") {
+    [...tracks].reverse().forEach(track => {
       track.position = Math.ceil((cursor - 0.000001) / interval) * interval;
       cursor = track.position + getTrackOutputDuration(track);
-    } else if (mode === "stagger") {
-      track.position = (index % 2) * beat + Math.floor(index / 2) * interval;
-    } else {
-      track.position = index * interval;
-    }
-  });
+    });
+  } else {
+    tracks.forEach((track, index) => {
+      if (mode === "sequence") {
+        track.position = Math.ceil((cursor - 0.000001) / interval) * interval;
+        cursor = track.position + getTrackOutputDuration(track);
+      } else if (mode === "stagger") {
+        track.position = (index % 2) * beat + Math.floor(index / 2) * interval;
+      } else {
+        track.position = index * interval;
+      }
+    });
+  }
   seekOffset = 0;
   renderTracks();
   drawTimeline();
-  const modeLabel = mode === "sequence" ? "順番に配置" : mode === "stagger" ? "交互配置" : "細かい刻み";
+  const modeLabel = mode === "sequence" ? "順番に配置" : mode === "reverse" ? "逆順配置" : mode === "stagger" ? "交互配置" : "細かい刻み";
   status(modeLabel + "モードでBPM " + bpm + " に合わせて配置しました。Ctrl+Zで元に戻せます。");
 });
 
