@@ -275,7 +275,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:25px}
         <h2>AI制作アシスタント（ローカル解析）</h2>
         <p class="muted">素材の長さ・音量・ピークをブラウザ内で解析し、編集計画のたたき台を作ります。生成AIモデルではなく、外部API接続なしで動く補助機能です。</p>
         <div class="field"><label for="aiGoal">作りたい音MADの方向性</label><select id="aiGoal"><option value="rhythm">リズム重視・細かい刻み</option><option value="voice">セリフ中心・聞き取りやすさ</option><option value="chaos">テンポの速いカオス系</option><option value="music">原曲に合わせた音程・リズム</option></select></div>
-        <div class="toolbar"><button id="analyzeBtn" class="secondary" disabled>素材を解析して編集案を作成</button><button id="copyPlanBtn" class="secondary" disabled>編集案をコピー</button><button id="exportAnalysisBtn" class="secondary" disabled>解析データをJSON保存</button><button id="autoGainBtn" class="secondary" disabled>選択素材の音量を自動調整</button></div>
+        <div class="toolbar"><button id="analyzeBtn" class="secondary" disabled>素材を解析して編集案を作成</button><button id="copyPlanBtn" class="secondary" disabled>編集案をコピー</button><button id="exportAnalysisBtn" class="secondary" disabled>解析データをJSON保存</button><button id="autoGainBtn" class="secondary" disabled>選択素材の音量を自動調整</button><button id="trimSilenceBtn" class="secondary" disabled>選択素材の前後の無音をカット</button></div>
         <div class="field" style="margin-top:8px">
           <label for="arrangeMode">自動配置モード</label>
           <select id="arrangeMode">
@@ -2370,6 +2370,45 @@ function detectTransientCandidates(buffer) {
 }
 
 let lastAiPlan = "";
+$("trimSilenceBtn").addEventListener("click", () => {
+  if (busy) return;
+  const targets = tracks.filter(track => selectedTrackIds.has(track.id));
+  if (!targets.length) {
+    status("先にトリミングしたいトラックを選択してください。");
+    return;
+  }
+  const changes = [];
+  let skipped = 0;
+  for (const track of targets) {
+    const metrics = analyzeAudioBuffer(track.buffer);
+    const regions = metrics.quietRegions.filter(region => region.end - region.start >= 0.25);
+    let startTrim = track.startTrim, end = track.end;
+    const leading = regions.find(region => region.start <= track.startTrim + 0.05 && region.end > track.startTrim + 0.25);
+    if (leading) startTrim = Math.min(track.end, Math.max(startTrim, leading.end - 0.04));
+    const trailing = [...regions].reverse().find(region => region.end >= track.end - 0.05 && region.start < track.end - 0.25);
+    if (trailing) end = Math.max(startTrim, Math.min(end, trailing.start + 0.04));
+    if (end - startTrim < 0.1 || (Math.abs(startTrim-track.startTrim)<0.01 && Math.abs(end-track.end)<0.01)) {
+      skipped++;
+      continue;
+    }
+    changes.push({track, startTrim, end});
+  }
+  if (!changes.length) {
+    status("カットできる前後の無音候補はありませんでした。しきい値による概算なので、素材によっては手動確認が必要です。");
+    return;
+  }
+  recordHistory();
+  stopPlayback();
+  changes.forEach(({track,startTrim,end}) => {
+    track.startTrim = startTrim;
+    track.end = Math.max(startTrim + 0.1, end);
+    track.fadeIn = Math.min(track.fadeIn, getTrackDuration(track));
+    track.fadeOut = Math.min(track.fadeOut, getTrackDuration(track));
+  });
+  renderTracks();
+  drawTimeline();
+  status("前後の低音量区間をトリミングしました（" + changes.length + "件）。" + (skipped ? "変更なし " + skipped + "件。" : "") + " Ctrl+Zで元に戻せます。");
+});
 $("autoGainBtn").addEventListener("click", () => {
   if (busy) return;
   const targets = tracks.filter(track => selectedTrackIds.has(track.id));
@@ -2493,6 +2532,7 @@ $("analyzeBtn").addEventListener("click", () => {
   };
   $("exportAnalysisBtn").disabled = false;
   $("autoGainBtn").disabled = false;
+  $("trimSilenceBtn").disabled = false;
   lastAiPlan = lines.join("\n");
   $("aiPlan").textContent = lastAiPlan;
   const jumpList = $("quietJumpList");
