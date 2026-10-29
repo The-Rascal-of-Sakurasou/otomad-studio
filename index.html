@@ -231,6 +231,14 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:25px}
           </div>
           <button id="repeatTrackBtn" class="secondary" disabled>拍に合わせて刻み複製</button>
         </div>
+        <div class="field" style="margin-top:8px">
+          <label for="repeatPattern">反復パターン</label>
+          <select id="repeatPattern">
+            <option value="same">同じ音程・音量</option>
+            <option value="pitch">音程を交互に変える（±12半音）</option>
+            <option value="volume">音量を交互に変える（100% / 60%）</option>
+          </select>
+        </div>
         <p class="muted">選んだ素材を指定した拍の間隔で複製します。元の素材は残り、Ctrl+Zで取り消せます。</p>
         <pre id="arrangePreview" class="ai-plan" aria-live="polite" hidden></pre>
         <p class="muted">適用すると、既存トラックの開始位置をBPMに合わせて並べ替えます。音声自体は複製・削除せず、Ctrl+Zで元に戻せます。</p>
@@ -1111,7 +1119,13 @@ $("repeatTrackBtn").addEventListener("click", () => {
       ...source,
       id: makeId(),
       name: source.name + " (刻み " + i + ")",
-      position: source.position + interval * i
+      position: source.position + interval * i,
+      pitch: $("repeatPattern").value === "pitch"
+        ? clamp(source.pitch + (i % 2 === 1 ? 12 : -12), -24, 24)
+        : source.pitch,
+      volume: $("repeatPattern").value === "volume"
+        ? source.volume * (i % 2 === 1 ? 0.6 : 1)
+        : source.volume
     });
   }
   const sourceIndex = tracks.findIndex(track => track.id === source.id);
