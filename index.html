@@ -188,6 +188,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:25px}
             step="1" value="120">
         </div>
         <div class="toolbar" style="margin-top:10px">
+          <select id="bpmSource" aria-label="BPM推定に使うトラック"><option value="">解析するトラックを選択</option></select>
           <button id="detectBpmBtn" disabled>音声からBPM推定</button>
           <button id="snapBtn" class="secondary">開始位置を拍に合わせる</button>
         </div>
@@ -360,8 +361,24 @@ function setBusy(value) {
   renderTracks();
 }
 
+function updateBpmSourceOptions() {
+  const select = $("bpmSource");
+  if (!select) return;
+  const previous = select.value;
+  select.replaceChildren();
+  for (const track of tracks) {
+    const option = document.createElement("option");
+    option.value = String(track.id);
+    option.textContent = track.name;
+    select.append(option);
+  }
+  if (tracks.some(track => String(track.id) === previous)) select.value = previous;
+  else if (tracks.length) select.value = String(tracks[0].id);
+}
+
 function updateButtons() {
   const hasTracks = tracks.length > 0;
+  updateBpmSourceOptions();
   playBtn.disabled = busy || !hasTracks;
   exportBtn.disabled = busy || !hasTracks;
   $("detectBpmBtn").disabled = busy || !hasTracks;
@@ -1540,14 +1557,16 @@ function estimateBpm(buffer) {
 
 $("detectBpmBtn").addEventListener("click", () => {
   if (!tracks.length || busy) return;
-  status("先頭トラックのリズムを解析しています…");
+  const selectedId = Number($("bpmSource").value);
+  const track = tracks.find(item => item.id === selectedId) || tracks[0];
+  status("「" + track.name + "」のリズムを解析しています…");
   try {
-    const result = estimateBpm(tracks[0].buffer);
+    const result = estimateBpm(track.buffer);
     if (!result) { status("BPMを推定できませんでした。打音が明瞭な素材をお試しください。"); return; }
     bpmInput.value = result.bpm;
     drawTimeline();
     const label = result.confidence >= 0.35 ? "比較的明瞭" : result.confidence >= 0.15 ? "不確か" : "かなり不確か";
-    status("推定BPM：" + result.bpm + "（リズム相関：" + label + "）。推定値なので、曲に合わせて確認してください。");
+    status("「" + track.name + "」の推定BPM：" + result.bpm + "（リズム相関：" + label + "）。推定値なので、曲に合わせて確認してください。");
   } catch (error) { console.error(error); status("BPM推定に失敗しました。"); }
 });
 $("snapBtn").addEventListener("click", () => {
