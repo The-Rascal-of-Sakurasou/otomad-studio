@@ -1410,14 +1410,18 @@ $("previewArrangeBtn").addEventListener("click", () => {
       reverseCursor = row.position + row.duration;
     });
   }
-  const total = Math.max(...rows.map(row => row.position + row.duration));
+  const targetIds = new Set(targetTracks.map(track => track.id));
+  const unchangedEnd = tracks
+    .filter(track => !targetIds.has(track.id))
+    .reduce((end, track) => Math.max(end, track.position + getTrackOutputDuration(track)), 0);
+  const total = Math.max(unchangedEnd, ...rows.map(row => row.position + row.duration));
   const preview = $("arrangePreview");
   preview.hidden = false;
   preview.textContent = "配置プレビュー（BPM " + bpm + "・対象 " + targetTracks.length + " トラック）\\n" +
     rows.map((row, index) => (index + 1) + ". " + row.name + "\\n   開始 " +
       row.position.toFixed(2) + " 秒 / 終了 " + (row.position + row.duration).toFixed(2) + " 秒")
       .join("\\n") + "\\n\\n配置後の総時間：約" + total.toFixed(2) +
-      " 秒\\n※プレビューのみです。適用するまでトラック位置は変わりません。";
+      " 秒\\n※対象外のトラックは現在の位置を維持して総時間に含めます。\\n※プレビューのみです。適用するまでトラック位置は変わりません。";
 });
 
 $("arrangeBtn").addEventListener("click", () => {
