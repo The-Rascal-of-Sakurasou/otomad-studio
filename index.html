@@ -217,7 +217,8 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:25px}
             <option value="stagger">交互配置（拍ごとにずらす）</option>
           </select>
         </div>
-        <div class="toolbar" style="margin-top:8px"><button id="arrangeBtn" class="secondary" disabled>リズム配置案を適用</button></div>
+        <div class="toolbar" style="margin-top:8px"><button id="previewArrangeBtn" class="secondary" disabled>配置案をプレビュー</button><button id="arrangeBtn" class="secondary" disabled>リズム配置案を適用</button></div>
+        <pre id="arrangePreview" class="ai-plan" aria-live="polite" hidden></pre>
         <p class="muted">適用すると、既存トラックの開始位置をBPMに合わせて並べ替えます。音声自体は複製・削除せず、Ctrl+Zで元に戻せます。</p>
         <pre id="aiPlan" class="ai-plan" aria-live="polite">音声素材を追加すると、解析して編集案を作成できます。</pre>
         <div id="quietJumpList" class="toolbar" aria-label="無音候補への移動" style="margin-top:10px"></div>
@@ -366,6 +367,7 @@ function updateButtons() {
   $("detectBpmBtn").disabled = busy || !hasTracks;
   $("analyzeBtn").disabled = busy || !hasTracks;
   $("arrangeBtn").disabled = busy || tracks.length < 2;
+  $("previewArrangeBtn").disabled = busy || tracks.length < 2;
   $("importBtn").disabled = busy;
   $("stopBtn").disabled = playbackSources.length === 0;
   $("trackCount").textContent = tracks.length + " tracks";
@@ -1039,6 +1041,36 @@ function drawTimeline() {
 // BPMや分割単位を変更したら、拍グリッドを即座に更新する。
 $("bpmInput").addEventListener("input", drawTimeline);
 $("snapDivision").addEventListener("change", drawTimeline);
+
+$("previewArrangeBtn").addEventListener("click", () => {
+  if (busy || tracks.length < 2) return;
+  const bpm = clamp(Number(bpmInput.value) || 120, 40, 240);
+  const beat = 60 / bpm;
+  const division = Math.max(1, Number($("snapDivision").value) || 4);
+  const interval = beat / division;
+  const mode = $("arrangeMode").value;
+  let cursor = 0;
+  const rows = tracks.map((track, index) => {
+    let position;
+    if (mode === "sequence") {
+      position = Math.ceil((cursor - 0.000001) / interval) * interval;
+      cursor = position + getTrackOutputDuration(track);
+    } else if (mode === "stagger") {
+      position = (index % 2) * beat + Math.floor(index / 2) * interval;
+    } else {
+      position = index * interval;
+    }
+    return { name: track.name, position, duration: getTrackOutputDuration(track) };
+  });
+  const total = Math.max(...rows.map(row => row.position + row.duration));
+  const preview = $("arrangePreview");
+  preview.hidden = false;
+  preview.textContent = "配置プレビュー（BPM " + bpm + "）\\n" +
+    rows.map((row, index) => (index + 1) + ". " + row.name + "\\n   開始 " +
+      row.position.toFixed(2) + " 秒 / 終了 " + (row.position + row.duration).toFixed(2) + " 秒")
+      .join("\\n") + "\\n\\n配置後の総時間：約" + total.toFixed(2) +
+      " 秒\\n※プレビューのみです。適用するまでトラック位置は変わりません。";
+});
 
 $("arrangeBtn").addEventListener("click", () => {
   if (busy || tracks.length < 2) return;
