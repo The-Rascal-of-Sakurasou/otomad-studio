@@ -79,6 +79,7 @@ hr{border:0;border-top:1px solid var(--border);margin:15px 0}
 border-radius:9px;color:var(--muted);font-size:13px}
 .timeline-box{overflow-x:auto;background:#14141b;border-radius:8px;padding:10px}
 #timeline{display:block;min-width:650px;width:100%;height:110px}
+.timeline-tools{align-items:center;margin-top:10px}.timeline-tools .stat{margin-left:auto}
 #timeline{cursor:grab;touch-action:none}#timeline.is-moving{cursor:grabbing;outline:1px solid var(--accent)}
 .badge{font-size:10px;background:#343044;color:#ddd6fe;
 padding:3px 6px;border-radius:5px}
@@ -132,6 +133,12 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:25px}
         <div class="timeline-box">
           <canvas id="timeline" width="1100" height="110"
             aria-label="音声トラックのタイムライン"></canvas>
+        </div>
+        <div class="toolbar timeline-tools" aria-label="タイムライン操作">
+          <button id="zoomOutBtn" class="secondary" type="button">− 縮小</button>
+          <button id="zoomResetBtn" class="secondary" type="button">全体表示</button>
+          <button id="zoomInBtn" class="secondary" type="button">＋ 拡大</button>
+          <span id="zoomLabel" class="stat">表示範囲: 全体</span>
         </div>
         <p class="muted">タイムライン上のトラック帯を左右にドラッグすると開始位置を変更できます。左端の0秒より前には移動できません。トラック一覧ではドラッグして上下の順番を変更できます。</p>
       </section>
@@ -242,6 +249,11 @@ let nextId = 1;
 let busy = false;
 let playbackSources = [];
 let playbackToken = 0;
+let timelineZoom = 1;
+let playbackStartedAt = 0;
+let playbackFrame = 0;
+let playbackDuration = 0;
+
 
 const undoStack = [];
 const redoStack = [];
@@ -916,7 +928,8 @@ function drawTimeline() {
   ctx.fillStyle = "#14141b";
   ctx.fillRect(0, 0, width, height);
 
-  const duration = Math.max(getMixDuration(), 10);
+  const totalDuration = Math.max(getMixDuration(), 10);
+  const duration = Math.max(1, totalDuration / timelineZoom);
   const left = 55;
   const right = width - 15;
   const usable = right - left;
@@ -950,6 +963,61 @@ function drawTimeline() {
       5, y + barHeight - 1
     );
   });
+
+  if (playbackStartedAt && playbackDuration > 0) {
+    const elapsed = (performance.now() - playbackStartedAt) / 1000;
+    const x = left + elapsed * scale;
+    if (elapsed <= playbackDuration && x >= left && x <= right) {
+      ctx.strokeStyle = "#6ee7b7";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x, 7);
+      ctx.lineTo(x, height - 7);
+      ctx.stroke();
+      ctx.fillStyle = "#6ee7b7";
+      ctx.fillText(elapsed.toFixed(2) + "s", Math.min(x + 4, right - 42), 10);
+    }
+  }
+
+  $("zoomLabel").textContent = "表示範囲: " +
+    (duration >= 60 ? (duration / 60).toFixed(1) + "分" : duration.toFixed(1) + "秒") +
+    (timelineZoom > 1 ? "（拡大 " + timelineZoom.toFixed(1) + "×）" : "（全体）");
+}
+
+(function enableTimelineZoom() {
+  $("zoomInBtn").addEventListener("click", () => {
+    timelineZoom = Math.min(16, Math.round((timelineZoom + 0.5) * 10) / 10);
+    drawTimeline();
+  });
+  $("zoomOutBtn").addEventListener("click", () => {
+    timelineZoom = Math.max(1, Math.round((timelineZoom - 0.5) * 10) / 10);
+    drawTimeline();
+  });
+  $("zoomResetBtn").addEventListener("click", () => {
+    timelineZoom = 1;
+    drawTimeline();
+  });
+  $("timeline").addEventListener("wheel", event => {
+    if (!event.ctrlKey) return;
+    event.preventDefault();
+    timelineZoom = clamp(timelineZoom + (event.deltaY < 0 ? 0.5 : -0.5), 1, 16);
+    drawTimeline();
+  }, { passive: false });
+})();
+
+function animatePlayhead() {
+  if (!playbackStartedAt || !playbackDuration) {
+    cancelAnimationFrame(playbackFrame);
+    playbackFrame = 0;
+    return;
+  }
+  drawTimeline();
+  if ((performance.now() - playbackStartedAt) / 1000 < playbackDuration) {
+    playbackFrame = requestAnimationFrame(animatePlayhead);
+  } else {
+    playbackStartedAt = 0;
+    drawTimeline();
+  }
 }
 
 (function enableTimelineDragging() {
@@ -1169,6 +1237,11 @@ async function renderMix() {
 }
 
 function stopPlayback() {
+  playbackStartedAt = 0;
+  playbackDuration = 0;
+  cancelAnimationFrame(playbackFrame);
+  playbackFrame = 0;
+  drawTimeline();
   playbackToken++;
 
   for (const source of playbackSources) {
@@ -1207,6 +1280,10 @@ playBtn.addEventListener("click", async () => {
     };
 
     source.start();
+    playbackStartedAt = performance.now();
+    playbackDuration = buffer.duration;
+    cancelAnimationFrame(playbackFrame);
+    playbackFrame = requestAnimationFrame(animatePlayhead);
     $("stopBtn").disabled = false;
     status("ミックスを再生中です。");
   } catch (error) {
