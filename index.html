@@ -135,6 +135,10 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:25px}
           <canvas id="timeline" width="1100" height="110"
             aria-label="音声トラックのタイムライン"></canvas>
         </div>
+        <div class="field" style="margin-top:10px">
+          <label for="seekSlider">再生開始位置：<span id="seekLabel">0.00 秒</span></label>
+          <input id="seekSlider" type="range" min="0" max="0" step="0.01" value="0" aria-label="再生開始位置">
+        </div>
         <div class="toolbar timeline-tools" aria-label="タイムライン操作">
           <button id="zoomOutBtn" class="secondary" type="button">− 縮小</button>
           <button id="zoomResetBtn" class="secondary" type="button">全体表示</button>
@@ -261,6 +265,8 @@ let timelineZoom = 1;
 let playbackStartedAt = 0;
 let playbackFrame = 0;
 let playbackDuration = 0;
+let playbackOffset = 0;
+let seekOffset = 0;
 
 
 const undoStack = [];
@@ -355,6 +361,11 @@ function updateButtons() {
   const duration = getMixDuration();
   $("durationLabel").textContent = duration.toFixed(2) + " 秒";
   $("infoDuration").textContent = duration.toFixed(2) + "秒";
+  const seekSlider = $("seekSlider");
+  seekSlider.max = String(duration);
+  seekOffset = clamp(seekOffset, 0, duration);
+  seekSlider.value = String(seekOffset);
+  $("seekLabel").textContent = seekOffset.toFixed(2) + " 秒";
 }
 
 function getTrackDuration(track) {
@@ -974,7 +985,7 @@ function drawTimeline() {
   });
 
   if (playbackStartedAt && playbackDuration > 0) {
-    const elapsed = (performance.now() - playbackStartedAt) / 1000;
+    const elapsed = playbackOffset + (performance.now() - playbackStartedAt) / 1000;
     const x = left + elapsed * scale;
     if (elapsed <= playbackDuration && x >= left && x <= right) {
       ctx.strokeStyle = "#6ee7b7";
@@ -992,6 +1003,12 @@ function drawTimeline() {
     (duration >= 60 ? (duration / 60).toFixed(1) + "分" : duration.toFixed(1) + "秒") +
     (timelineZoom > 1 ? "（拡大 " + timelineZoom.toFixed(1) + "×）" : "（全体）");
 }
+
+$("seekSlider").addEventListener("input", event => {
+  seekOffset = Number(event.target.value) || 0;
+  $("seekLabel").textContent = seekOffset.toFixed(2) + " 秒";
+  if (!playbackStartedAt) drawTimeline();
+});
 
 (function enableTimelineZoom() {
   $("zoomInBtn").addEventListener("click", () => {
@@ -1288,9 +1305,10 @@ playBtn.addEventListener("click", async () => {
       }
     };
 
-    source.start();
+    playbackOffset = clamp(seekOffset, 0, Math.max(0, buffer.duration - 0.01));
+    source.start(0, playbackOffset);
     playbackStartedAt = performance.now();
-    playbackDuration = buffer.duration;
+    playbackDuration = Math.max(0, buffer.duration - playbackOffset);
     cancelAnimationFrame(playbackFrame);
     playbackFrame = requestAnimationFrame(animatePlayhead);
     $("stopBtn").disabled = false;
