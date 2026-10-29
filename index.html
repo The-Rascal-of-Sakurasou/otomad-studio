@@ -191,6 +191,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:25px}
           <select id="bpmSource" aria-label="BPM推定に使うトラック"><option value="">解析するトラックを選択</option></select>
           <button id="detectBpmBtn" disabled>音声からBPM推定</button>
           <button id="snapBtn" class="secondary">開始位置を拍に合わせる</button>
+          <button id="snapTransientBtn" class="secondary">音の立ち上がりを拍に合わせる</button>
         </div>
         <div class="field">
           <label for="snapDivision">拍の分割</label>
@@ -1568,6 +1569,36 @@ $("detectBpmBtn").addEventListener("click", () => {
     const label = result.confidence >= 0.35 ? "比較的明瞭" : result.confidence >= 0.15 ? "不確か" : "かなり不確か";
     status("「" + track.name + "」の推定BPM：" + result.bpm + "（リズム相関：" + label + "）。推定値なので、曲に合わせて確認してください。");
   } catch (error) { console.error(error); status("BPM推定に失敗しました。"); }
+});
+$("snapTransientBtn").addEventListener("click", () => {
+  const bpm = Number(bpmInput.value);
+  const division = Number($("snapDivision").value);
+  if (!Number.isFinite(bpm) || bpm < 40 || bpm > 240) {
+    status("BPMは40〜240の範囲で入力してください。");
+    return;
+  }
+  const grid = 60 / bpm / division;
+  const adjustments = [];
+  for (const track of tracks) {
+    const candidates = detectTransientCandidates(track.buffer)
+      .filter(item => item.time >= track.startTrim && item.time <= track.end)
+      .sort((a, b) => a.time - b.time);
+    if (!candidates.length) continue;
+    const first = candidates[0].time;
+    const outputOffset = (first - track.startTrim) / Math.pow(2, track.pitch / 12);
+    const alignedPosition = Math.max(0, Math.round((track.position + outputOffset) / grid) * grid - outputOffset);
+    adjustments.push({ track, position: alignedPosition });
+  }
+  if (!adjustments.length) {
+    status("立ち上がり候補が見つかりませんでした。音量の大きい素材でお試しください。");
+    return;
+  }
+  recordHistory();
+  adjustments.forEach(item => { item.track.position = item.position; });
+  seekOffset = 0;
+  renderTracks();
+  drawTimeline();
+  status(adjustments.length + "トラックの最初の立ち上がり候補を拍に合わせました。検出誤差があるため再生して確認してください。");
 });
 $("snapBtn").addEventListener("click", () => {
   const bpm = Number(bpmInput.value);
