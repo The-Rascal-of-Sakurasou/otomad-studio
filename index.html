@@ -109,6 +109,8 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:25px}
       <button id="saveProjectBtn" class="secondary">プロジェクト設定を保存</button>
       <button id="loadProjectBtn" class="secondary">設定を読み込む</button>
       <button id="clearBtn" class="danger">全トラック削除</button>
+      <button id="undoBtn" class="secondary" disabled>↶ 元に戻す</button>
+      <button id="redoBtn" class="secondary" disabled>↷ やり直す</button>
     </div>
     <input id="fileInput" type="file" accept="audio/*" multiple hidden>
     <input id="projectInput" type="file" accept=".json,application/json" hidden>
@@ -239,6 +241,56 @@ let busy = false;
 let playbackSources = [];
 let playbackToken = 0;
 
+const undoStack = [];
+const redoStack = [];
+const HISTORY_LIMIT = 80;
+let restoringHistory = false;
+
+function captureTrackState() {
+  return tracks.map(track => ({ ...track }));
+}
+
+function recordHistory() {
+  if (restoringHistory) return;
+  undoStack.push(captureTrackState());
+  if (undoStack.length > HISTORY_LIMIT) undoStack.shift();
+  redoStack.length = 0;
+  updateHistoryButtons();
+}
+
+function updateHistoryButtons() {
+  const undo = $("undoBtn");
+  const redo = $("redoBtn");
+  if (undo) undo.disabled = busy || undoStack.length === 0;
+  if (redo) redo.disabled = busy || redoStack.length === 0;
+}
+
+function restoreTrackState(state, message) {
+  restoringHistory = true;
+  tracks = state.map(track => ({ ...track }));
+  nextId = Math.max(1, ...tracks.map(track => track.id + 1));
+  restoringHistory = false;
+  stopPlayback();
+  renderTracks();
+  drawTimeline();
+  updateButtons();
+  updateHistoryButtons();
+  status(message);
+}
+
+function undoEdit() {
+  if (busy || !undoStack.length) return;
+  redoStack.push(captureTrackState());
+  restoreTrackState(undoStack.pop(), "操作を元に戻しました。");
+}
+
+function redoEdit() {
+  if (busy || !redoStack.length) return;
+  undoStack.push(captureTrackState());
+  restoreTrackState(redoStack.pop(), "操作をやり直しました。");
+}
+
+
 function status(message) {
   statusBox.textContent = message;
 }
@@ -342,6 +394,7 @@ async function loadAudioFiles(fileList) {
       try {
         const data = await file.arrayBuffer();
         const buffer = await ctx.decodeAudioData(data);
+        recordHistory();
         tracks.push(createTrack(file.name, buffer));
         success++;
       } catch (error) {
@@ -422,6 +475,7 @@ function createField(labelText, value, min, max, step, callback, type = "number"
     if (!Number.isFinite(n)) n = Number(value);
     n = clamp(n, Number(min), Number(max));
     input.value = n;
+    recordHistory();
     callback(n);
     updateButtons();
     drawTimeline();
@@ -451,6 +505,7 @@ function createSelect(labelText, value, options, callback) {
   select.value = value;
   select.addEventListener("change", () => {
     if (busy) return;
+    recordHistory();
     callback(select.value);
   });
 
@@ -469,7 +524,7 @@ function createCheck(labelText, checked, callback) {
   input.checked = checked;
   input.disabled = busy;
   input.addEventListener("change", () => {
-    if (!busy) callback(input.checked);
+    if (!busy) { recordHistory(); callback(input.checked); }
   });
 
   wrapper.append(input, document.createTextNode(labelText));
@@ -589,6 +644,7 @@ function renderTracks() {
 
       if (from < 0 || to < 0 || from === to) return;
 
+      recordHistory();
       const [moved] = tracks.splice(from, 1);
       tracks.splice(to, 0, moved);
       renderTracks();
@@ -1283,6 +1339,7 @@ $("clearBtn").addEventListener("click", () => {
   if (busy) return;
   if (!confirm("すべてのトラックを削除しますか？")) return;
 
+  recordHistory();
   stopPlayback();
   tracks = [];
   renderTracks();
@@ -1324,9 +1381,33 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
+$("undoBtn").addEventListener("click", undoEdit);
+$("redoBtn").addEventListener("click", redoEdit);
+
+document.addEventListener("keydown", event => {
+  const target = event.target;
+  const typing = target && (
+    target.matches("input, textarea, select") || target.isContentEditable
+  );
+  if (typing || busy || !(event.ctrlKey || event.metaKey)) return;
+
+  const key = event.key.toLowerCase();
+  if (key === "z" && event.shiftKey) {
+    event.preventDefault();
+    redoEdit();
+  } else if (key === "z") {
+    event.preventDefault();
+    undoEdit();
+  } else if (key === "y") {
+    event.preventDefault();
+    redoEdit();
+  }
+});
+
 renderTracks();
 drawTimeline();
 updateButtons();
+updateHistoryButtons();
 </script>
 </body>
 </html>
