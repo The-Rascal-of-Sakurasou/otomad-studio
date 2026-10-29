@@ -60,6 +60,8 @@ border-radius:10px;padding:13px;min-width:0}
 .track-name{font-weight:750;overflow-wrap:anywhere;flex:1;min-width:0}
 .track-number{color:var(--accent);font-size:12px}
 .wave-wrap{position:relative;width:100%;margin:8px 0 12px}
+.wave{cursor:crosshair;touch-action:none}.wave.is-trimming{cursor:ew-resize;outline:1px solid var(--accent)}
+.wave-help strong{color:var(--accent)}
 .wave{display:block;width:100%;height:72px;background:#20202b;
 border-radius:6px;touch-action:pan-y}
 .wave-help{font-size:11px;color:var(--muted);margin-top:4px}
@@ -592,6 +594,97 @@ function drawWaveform(canvas, track) {
   ctx.moveTo(right, 0);
   ctx.lineTo(right, height);
   ctx.stroke();
+
+  // Trim handles: clear visual markers with a small grip at each boundary.
+  for (const x of [left, right]) {
+    ctx.fillStyle = "#f0abfc";
+    ctx.fillRect(Math.max(0, Math.min(width - 3, x - 1.5)), 0, 3, height);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(Math.max(0, Math.min(width - 5, x - 2.5)), height / 2 - 5, 5, 10);
+  }
+}
+
+function attachWaveTrim(canvas, track, help) {
+  let dragMode = null;
+  let pointerId = null;
+  let changed = false;
+  const minGap = Math.min(0.01, track.buffer.duration);
+
+  function secondsAt(clientX) {
+    const rect = canvas.getBoundingClientRect();
+    const ratio = clamp((clientX - rect.left) / rect.width, 0, 1);
+    return ratio * track.buffer.duration;
+  }
+
+  function closestHandle(clientX) {
+    const rect = canvas.getBoundingClientRect();
+    const x = clamp(clientX - rect.left, 0, rect.width);
+    const leftX = track.startTrim / track.buffer.duration * rect.width;
+    const rightX = track.end / track.buffer.duration * rect.width;
+    const leftDistance = Math.abs(x - leftX);
+    const rightDistance = Math.abs(x - rightX);
+    if (Math.min(leftDistance, rightDistance) <= 14) {
+      return leftDistance <= rightDistance ? "start" : "end";
+    }
+    return null;
+  }
+
+  canvas.addEventListener("pointerdown", event => {
+    if (busy || event.button !== 0) return;
+    const handle = closestHandle(event.clientX);
+    if (!handle) {
+      status("波形の左右端のハンドルをドラッグすると、切り取り範囲を変更できます。");
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    recordHistory();
+    dragMode = handle;
+    pointerId = event.pointerId;
+    changed = false;
+    canvas.classList.add("is-trimming");
+    canvas.setPointerCapture(pointerId);
+  });
+
+  canvas.addEventListener("pointermove", event => {
+    if (!dragMode || event.pointerId !== pointerId) {
+      const handle = closestHandle(event.clientX);
+      canvas.style.cursor = handle ? "ew-resize" : "crosshair";
+      return;
+    }
+    event.preventDefault();
+    const seconds = secondsAt(event.clientX);
+    if (dragMode === "start") {
+      track.startTrim = clamp(seconds, 0, track.end - minGap);
+    } else {
+      track.end = clamp(seconds, track.startTrim + minGap, track.buffer.duration);
+    }
+    const duration = getTrackDuration(track);
+    track.fadeIn = Math.min(track.fadeIn, duration);
+    track.fadeOut = Math.min(track.fadeOut, duration);
+    changed = true;
+    drawWaveform(canvas, track);
+    help.textContent =
+      `全長 ${track.buffer.duration.toFixed(2)} 秒 / 使用範囲 ${duration.toFixed(2)} 秒 / ` +
+      `切り取り ${track.startTrim.toFixed(2)}–${track.end.toFixed(2)} 秒`;
+    drawTimeline();
+  });
+
+  function finish(event) {
+    if (!dragMode || (event && event.pointerId !== pointerId)) return;
+    dragMode = null;
+    pointerId = null;
+    canvas.classList.remove("is-trimming");
+    if (changed) {
+      renderTracks();
+      drawTimeline();
+      updateButtons();
+      status("波形上で切り取り範囲を更新しました。Ctrl+Zで元に戻せます。");
+    }
+    changed = false;
+  }
+  canvas.addEventListener("pointerup", finish);
+  canvas.addEventListener("pointercancel", finish);
 }
 
 function renderTracks() {
@@ -734,6 +827,7 @@ function renderTracks() {
       `使用範囲 ${(track.end - track.startTrim).toFixed(2)} 秒`;
 
     waveWrap.append(help);
+    attachWaveTrim(canvas, track, help);
 
     const controls = document.createElement("div");
     controls.className = "controls";
