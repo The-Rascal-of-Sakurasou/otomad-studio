@@ -312,6 +312,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:25px}
             <option value="same">同じ音程・音量</option>
             <option value="pitch">音程を交互に変える（±12半音）</option>
             <option value="volume">音量を交互に変える（100% / 60%）</option>
+            <option value="pitchVolume">音程と音量を交互に変える</option>
           </select>
         </div>
         <div class="row" style="margin-top:10px">
@@ -1370,6 +1371,12 @@ $("transientSliceBtn").addEventListener("click", () => {
       startTrim: range.startTrim,
       end: range.end,
       position: source.position + i * interval,
+      pitch: ["pitch", "pitchVolume"].includes($("repeatPattern").value)
+        ? clamp(source.pitch + (i % 2 === 0 ? 12 : -12), -24, 24)
+        : source.pitch,
+      volume: ["volume", "pitchVolume"].includes($("repeatPattern").value)
+        ? source.volume * (i % 2 === 0 ? 1 : 0.6)
+        : source.volume,
       fadeIn: Math.min(source.fadeIn, segmentDuration),
       fadeOut: Math.min(source.fadeOut, segmentDuration)
     };
@@ -1378,7 +1385,7 @@ $("transientSliceBtn").addEventListener("click", () => {
   seekOffset = 0;
   renderTracks();
   drawTimeline();
-  status("音の立ち上がり候補を基準に " + segments.length + " 個へ分割し、" + interval.toFixed(3) + " 秒間隔で配置しました。検出は音量変化による概算です。Ctrl+Zで戻せます。");
+  status("音の立ち上がり候補を基準に " + segments.length + " 個へ分割し、" + interval.toFixed(3) + " 秒間隔で配置しました。選択中の反復パターンも適用しています。検出は音量変化による概算です。Ctrl+Zで戻せます。");
 });
 
 $("repeatTrackBtn").addEventListener("click", () => {
