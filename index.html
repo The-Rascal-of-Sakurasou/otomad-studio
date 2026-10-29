@@ -16,7 +16,16 @@
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);
 font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
-button,input,select{font:inherit}
+button,input,select,textarea{font:inherit}
+textarea{width:100%;resize:vertical;background:#111117;color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px;line-height:1.6}
+.help-box{padding:10px 12px;border-left:3px solid var(--accent);background:#22202c;border-radius:0 8px 8px 0}
+.help-box strong{color:#ddd6fe}
+.section-intro{margin:0 0 12px;color:var(--muted);font-size:13px;line-height:1.75}
+.step-guide{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:12px 0 4px}
+.step-guide a{display:block;padding:10px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;color:var(--text);text-decoration:none;font-size:12px;line-height:1.55}
+.step-guide a strong{display:block;color:var(--accent);font-size:13px;margin-bottom:3px}
+.step-guide a:hover{border-color:var(--accent)}
+@media(max-width:700px){.step-guide{grid-template-columns:repeat(2,minmax(0,1fr))}}
 button{border:0;border-radius:8px;padding:9px 13px;
 background:var(--accent);color:#171221;font-weight:700;cursor:pointer}
 button:hover{filter:brightness(1.08)}
@@ -130,23 +139,35 @@ button:disabled{cursor:not-allowed;opacity:.48}
 <a class="skip-link" href="#mainContent">メインコンテンツへ移動</a>
 <header>
   <div class="brand"><span>OtoMAD</span> Studio</div>
-  <div class="subtitle">MULTITRACK AUDIO EDITOR / 音MAD制作スタジオ</div>
+  <div class="subtitle">音MAD制作・音声編集ツール</div>
 </header>
 <nav class="quick-nav" aria-label="ページ内ナビゲーション"><a href="#projectPanel">プロジェクト</a><a href="#timelinePanel">タイムライン</a><a href="#tracksPanel">トラック編集</a><a href="#bpmPanel">BPM・リズム</a><a href="#assistantPanel">制作アシスタント</a><a href="#masterPanel">書き出し設定</a></nav>
 
 <main id="mainContent">
+  <div class="panel" id="gettingStartedPanel">
+    <h2>はじめての方へ｜基本の4ステップ</h2>
+    <p class="section-intro">まずは音声を読み込み、再生して確認するところから始めてください。専門用語が分からなくても、下の順番で操作できます。</p>
+    <div class="step-guide">
+      <a href="#projectPanel"><strong>1. 音声を追加</strong>編集したい音声ファイルを読み込みます。</a>
+      <a href="#timelinePanel"><strong>2. 位置を調整</strong>音声の帯を左右に動かしてタイミングを合わせます。</a>
+      <a href="#assistantPanel"><strong>3. 自動編集を試す</strong>方向性や指示を設定し、生成・配置を試します。</a>
+      <a href="#masterPanel"><strong>4. 保存する</strong>再生して確認し、完成音声をWAVで保存します。</a>
+    </div>
+    <p class="muted" style="margin-bottom:0">用語メモ：<strong>素材／トラック</strong>＝読み込んだ音声1つ分、<strong>タイムライン</strong>＝音声を時間順に並べる場所、<strong>ミュート</strong>＝音を一時的に消すこと、<strong>WAV</strong>＝完成した音声ファイル形式です。</p>
+  </div>
+
   <div class="panel" id="projectPanel">
     <div class="row spread">
-      <h2>プロジェクト</h2>
-      <span class="badge">BROWSER AUDIO ENGINE</span>
+      <h2>① 音声を読み込む・再生する</h2>
+      <span class="badge">ブラウザ内で処理</span>
     </div>
     <div class="toolbar">
       <button id="importBtn">＋ 音声を追加</button>
-      <button id="playBtn" class="green" disabled>▶ ミックス再生</button>
+      <button id="playBtn" class="green" disabled title="読み込んだ素材を重ねて再生します">▶ 再生して確認</button>
       <button id="stopBtn" class="secondary" disabled>■ 停止</button>
-      <button id="exportBtn" disabled>WAVを書き出す</button>
-      <button id="saveProjectBtn" class="secondary">プロジェクト設定を保存</button>
-      <button id="loadProjectBtn" class="secondary">設定を読み込む</button>
+      <button id="exportBtn" disabled title="編集結果を音声ファイルとして保存します">完成音声を保存（WAV）</button>
+      <button id="saveProjectBtn" class="secondary" title="配置や音量などの設定をJSONファイルに保存します。音声本体は保存されません">編集設定を保存（JSON）</button>
+      <button id="loadProjectBtn" class="secondary" title="以前保存したJSON設定を読み込みます。音声素材は別途読み込みが必要です">編集設定を読み込む</button>
       <button id="clearBtn" class="danger">全トラック削除</button>
       <button id="undoBtn" class="secondary" disabled>↶ 元に戻す</button>
       <button id="redoBtn" class="secondary" disabled>↷ やり直す</button>
@@ -163,7 +184,7 @@ button:disabled{cursor:not-allowed;opacity:.48}
     <div>
       <section class="panel" id="timelinePanel">
         <div class="row spread">
-          <h2>タイムライン</h2>
+          <h2>② 音声の位置を調整する</h2>
           <span id="durationLabel" class="stat">0.00 秒</span>
         </div>
         <div class="timeline-box">
@@ -180,13 +201,13 @@ button:disabled{cursor:not-allowed;opacity:.48}
           <button id="zoomInBtn" class="secondary" type="button">＋ 拡大</button>
           <span id="zoomLabel" class="stat">表示範囲: 全体</span>
         </div>
-        <p class="muted">タイムライン上のトラック帯を左右にドラッグすると開始位置を変更できます。左端の0秒より前には移動できません。トラック一覧ではドラッグして上下の順番を変更できます。</p>
+        <p class="muted help-box"><strong>操作方法：</strong>タイムライン上の音声の帯を左右にドラッグすると、再生する位置を変えられます。素材一覧では、素材を上下にドラッグして順番を変えられます。拡大・縮小は下のボタンを使います。</p>
       </section>
 
       <section class="panel" id="tracksPanel">
         <div class="row spread">
-          <h2>トラック編集</h2>
-          <span id="trackCount" class="stat">0 tracks</span>
+          <h2>③ 素材ごとに編集する</h2>
+          <span id="trackCount" class="stat">素材 0 件</span>
         </div>
         <div class="toolbar" aria-label="複数トラック操作">
           <button id="selectAllTracksBtn" class="secondary" type="button" disabled>全選択</button>
@@ -242,8 +263,8 @@ button:disabled{cursor:not-allowed;opacity:.48}
             </div>
           </div>
         </div>
-        <p class="muted">グループはトラックを整理して一括選択するための機能です。グループ設定はCtrl+Zで取り消せます。</p>
-        <p class="muted">チェックしたトラックにまとめて操作できます。拍単位の移動はBPMと「拍の分割」の設定に従います。削除や位置変更はCtrl+Zで取り消せます。</p>
+        <p class="muted help-box"><strong>グループとは：</strong>素材に「ボイス」「効果音」などの名前を付けて整理する機能です。同じグループをまとめて選択・消音できます。Ctrl+Zで取り消せます。</p>
+        <p class="muted">左のチェックを付けた素材に、まとめて操作を適用します。よく分からない場合は、まず1つの素材だけ選んで試してください。多くの操作はCtrl+Zで元に戻せます。</p>
         <div id="trackList">
           <div class="empty">音声ファイルを追加すると、ここにトラックが表示されます。</div>
         </div>
@@ -252,29 +273,29 @@ button:disabled{cursor:not-allowed;opacity:.48}
 
     <aside>
       <section class="panel" id="masterPanel">
-        <h2>マスター／書き出し設定</h2>
+        <h2>全体の音量・保存形式</h2>
         <div class="field">
-          <label for="masterVolume">マスター音量</label>
+          <label for="masterVolume">完成音声全体の音量</label>
           <input id="masterVolume" type="range" min="0" max="1.5"
             step="0.01" value="0.8">
           <div id="masterValue" class="range-value">80%</div>
         </div>
         <hr>
         <div class="field">
-          <label for="sampleRate">書き出しサンプルレート</label>
+          <label for="sampleRate">保存する音声の品質（サンプルレート）</label>
           <select id="sampleRate">
             <option value="44100">44,100 Hz</option>
             <option value="48000">48,000 Hz</option>
           </select>
         </div>
-        <p class="muted">WAVは16-bit PCM・ステレオで出力します。
+        <p class="muted">保存形式はWAV（16-bit PCM・ステレオ）です。
         大きなプロジェクトはメモリ不足になる場合があります。</p>
       </section>
 
       <section class="panel" id="bpmPanel">
-        <h2>BPM・リズム補助</h2>
+        <h2>テンポ・拍合わせ</h2>
         <div class="field">
-          <label for="bpmInput">プロジェクトBPM</label>
+          <label for="bpmInput">曲のテンポ（BPM・1分間の拍数）</label>
           <input id="bpmInput" type="number" min="40" max="240"
             step="1" value="120">
         </div>
@@ -300,23 +321,23 @@ button:disabled{cursor:not-allowed;opacity:.48}
             <option value="8">1/8拍</option>
           </select>
         </div>
-        <p class="muted">BPM推定は音量変化からの概算です。
+        <p class="muted">BPM（テンポ）は曲の速さを表す数値です。BPM推定は音量変化からの概算なので、声や複雑な曲では正確でない場合があります。
         無音・声・複雑な音楽では誤差が大きくなる場合があります。</p>
       </section>
 
       <section class="panel" id="assistantPanel">
-        <h2>制作アシスタント（ローカル解析）</h2>
-        <p class="muted">素材をブラウザ内で解析し、立ち上がり検出・拍同期・短いクリップの配置から自動構成を作成します。外部API不要のルールベース生成で、生成AIモデルによる意味理解ではありません。元のトラックはミュートして残し、Ctrl+Zで取り消せます。</p>
-        <div class="field"><label for="aiGoal">作りたい音MADの方向性</label><select id="aiGoal"><option value="rhythm">リズム重視・細かい刻み</option><option value="voice">セリフ中心・聞き取りやすさ</option><option value="chaos">テンポの速いカオス系</option><option value="music">原曲に合わせた音程・リズム</option></select></div>
+        <h2>④ 自動編集・音MAD作成補助</h2>
+        <p class="muted help-box">音声素材の音量変化を調べ、短い音の切り出しや拍に合わせた配置を補助します。現在は<strong>対応キーワードとルールによる自動編集</strong>で、文章を自由に理解する生成AIではありません。自動生成では元の素材を消さず、ミュートして残します。Ctrl+Zで取り消せます。</p>
+        <div class="field"><label for="aiGoal">自動作成の方向性</label><select id="aiGoal"><option value="rhythm">リズム重視・細かい刻み</option><option value="voice">セリフ中心・聞き取りやすさ</option><option value="chaos">テンポの速いカオス系</option><option value="music">原曲に合わせた音程・リズム</option></select></div>
         <div class="field" style="margin-top:10px">
-          <label for="generationPrompt">プロンプト（作りたい音MADを文章で指定）</label>
+          <label for="generationPrompt">作りたい音MADの指示（文章で入力）</label>
           <textarea id="generationPrompt" rows="3" maxlength="500" placeholder="例：BPM 150で、セリフ中心。細かく刻んでテンポの速いカオス系にする"></textarea>
           <p class="muted">対応キーワード・BPM・拍の分割・音程・左右パンを読み取り、素材内の音量ピークも配置やクリップ音量に反映します。例：「BPM 150、16分刻み、左右交互、セリフ中心」。文章の完全な意味理解や音声内容の自動認識には対応していません。</p>
           <div class="toolbar"><button id="clearPromptBtn" class="secondary" type="button">プロンプトを消去</button><button id="applyPromptBtn" class="secondary" type="button">指示を設定に反映</button></div>
         </div>
         <div class="toolbar"><button id="autoGenerateBtn" class="green" disabled>プロンプトで音MADを生成</button><button id="analyzeBtn" class="secondary" disabled>素材を解析して編集案を作成</button><button id="copyPlanBtn" class="secondary" disabled>編集案をコピー</button><button id="exportAnalysisBtn" class="secondary" disabled>解析データをJSON保存</button><button id="autoGainBtn" class="secondary" disabled>選択素材の音量を自動調整</button><button id="trimSilenceBtn" class="secondary" disabled>選択素材の前後の無音をカット</button><button id="prepareSelectedBtn" class="primary" disabled>選択素材をまとめて整える</button></div>
         <div class="field" style="margin-top:8px">
-          <label for="arrangeMode">自動配置モード</label>
+          <label for="arrangeMode">素材の並べ方</label>
           <select id="arrangeMode">
             <option value="rhythm">細かい刻み（短い間隔で重ねる）</option>
             <option value="sequence">順番に配置（前の素材の後ろへ）</option>
@@ -326,7 +347,7 @@ button:disabled{cursor:not-allowed;opacity:.48}
           </select>
         </div>
         <div class="field" style="margin-top:8px">
-          <label for="arrangeScope">配置するトラック</label>
+          <label for="arrangeScope">並べ替える素材の範囲</label>
           <select id="arrangeScope">
             <option value="all">すべてのトラック</option>
             <option value="selected">選択中のトラックのみ</option>
@@ -337,12 +358,12 @@ button:disabled{cursor:not-allowed;opacity:.48}
         <div class="toolbar" style="margin-top:8px"><button id="onsetFromAnalysisBtn" class="secondary" type="button" disabled>解析を使って立ち上がり同期を設定</button></div>
         <p class="muted">解析結果から立ち上がり同期モードを設定し、配置案のプレビューを開きます。実際の配置変更は適用ボタンを押すまで行いません。</p>
         <div class="field" style="margin-top:10px">
-          <label for="repeatSource">拍に合わせて反復する素材</label>
+          <label for="repeatSource">繰り返し使う素材</label>
           <select id="repeatSource" aria-label="反復するトラック"></select>
         </div>
         <div class="row" style="margin-top:8px">
           <div class="field">
-            <label for="repeatCount">追加する反復数</label>
+            <label for="repeatCount">何回追加するか</label>
             <input id="repeatCount" type="number" min="1" max="32" step="1" value="4">
           </div>
           <button id="repeatTrackBtn" class="secondary" disabled>拍に合わせて刻み複製</button>
@@ -358,7 +379,7 @@ button:disabled{cursor:not-allowed;opacity:.48}
         </div>
         <div class="row" style="margin-top:10px">
           <div class="field">
-            <label for="sliceCount">切り出す個数</label>
+            <label for="sliceCount">何個に切り分けるか</label>
             <select id="sliceCount">
               <option value="2">2分割</option>
               <option value="4" selected>4分割</option>
@@ -384,7 +405,7 @@ button:disabled{cursor:not-allowed;opacity:.48}
           <span class="stat">トラック数 <b id="infoTracks">0</b></span>
           <span class="stat">総時間 <b id="infoDuration">0秒</b></span>
         </div>
-        <p class="muted">編集した音声はブラウザ内で処理されます。
+        <p class="muted">編集した音声はこのブラウザ内で処理されます。
         設定ファイルには音声データそのものは含まれないため、
         別のブラウザで再開する場合は素材を再読み込みしてください。</p>
       </section>
@@ -405,7 +426,7 @@ button:disabled{cursor:not-allowed;opacity:.48}
     </aside>
   </div>
 </main>
-<footer>OtoMAD Studio · Audio Creation Studio</footer>
+<footer>OtoMAD Studio｜音MAD制作・音声編集ツール</footer>
 
 <script>
 "use strict";
