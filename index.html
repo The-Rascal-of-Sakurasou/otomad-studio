@@ -204,6 +204,8 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:25px}
             <div class="row">
               <select id="groupFilter" disabled><option value="">すべてのトラック</option></select>
               <button id="groupSelectBtn" class="secondary" type="button" disabled>グループを選択</button>
+              <button id="groupMuteBtn" class="secondary" type="button" disabled>グループをミュート</button>
+              <button id="groupSoloBtn" class="secondary" type="button" disabled>グループをソロ</button>
             </div>
           </div>
         </div>
@@ -505,6 +507,15 @@ function updateBpmSourceOptions() {
   else if (tracks.length) select.value = String(tracks[0].id);
 }
 
+function updateGroupActionButtons() {
+  const group = $("groupFilter").value;
+  const members = group ? tracks.filter(track => (track.group || "") === group) : [];
+  $("groupMuteBtn").disabled = busy || !members.length;
+  $("groupSoloBtn").disabled = busy || !members.length;
+  $("groupMuteBtn").textContent = members.length && members.every(track => track.muted) ? "グループのミュート解除" : "グループをミュート";
+  $("groupSoloBtn").textContent = members.length && members.every(track => track.solo) ? "グループのソロ解除" : "グループをソロ";
+}
+
 function updateGroupFilterOptions() {
   const select = $("groupFilter");
   if (!select) return;
@@ -524,6 +535,7 @@ function updateGroupFilterOptions() {
   select.value = groups.includes(previous) ? previous : "";
   select.disabled = busy || groups.length === 0;
   $("groupSelectBtn").disabled = busy || !select.value;
+  updateGroupActionButtons();
 }
 
 function updateButtons() {
@@ -2083,6 +2095,35 @@ $("groupAssignBtn").addEventListener("click", () => {
 });
 $("groupFilter").addEventListener("change", () => {
   $("groupSelectBtn").disabled = busy || !$("groupFilter").value;
+  updateGroupActionButtons();
+});
+$("groupMuteBtn").addEventListener("click", () => {
+  if (busy) return;
+  const group = $("groupFilter").value;
+  const members = tracks.filter(track => group && (track.group || "") === group);
+  if (!members.length) return;
+  const mute = !members.every(track => track.muted);
+  recordHistory();
+  stopPlayback();
+  members.forEach(track => { track.muted = mute; });
+  renderTracks();
+  status("「" + group + "」グループ" + (mute ? "をミュートしました。" : "のミュートを解除しました。"));
+});
+$("groupSoloBtn").addEventListener("click", () => {
+  if (busy) return;
+  const group = $("groupFilter").value;
+  const members = tracks.filter(track => group && (track.group || "") === group);
+  if (!members.length) return;
+  const solo = !members.every(track => track.solo);
+  recordHistory();
+  stopPlayback();
+  if (solo) {
+    tracks.forEach(track => { track.solo = members.some(member => member.id === track.id); });
+  } else {
+    members.forEach(track => { track.solo = false; });
+  }
+  renderTracks();
+  status("「" + group + "」グループ" + (solo ? "だけをソロにしました。" : "のソロを解除しました。"));
 });
 $("groupSelectBtn").addEventListener("click", () => {
   if (busy) return;
