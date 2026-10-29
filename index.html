@@ -57,7 +57,8 @@ border-radius:10px;padding:13px;min-width:0}
 .track.dragging{opacity:.45}
 .track.drop-target{border-color:var(--accent)}
 .track-head{display:flex;align-items:center;gap:9px;margin-bottom:10px}
-.track-select{width:18px;height:18px;flex:none}.track-head .track-select-label{display:flex;align-items:center;gap:5px;color:var(--muted);font-size:11px;flex:none}
+.track-select{width:18px;height:18px;flex:none}
+.bulk-controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:0 0 12px}.bulk-controls .row{align-items:stretch}.bulk-controls input{min-width:80px;flex:1}@media(max-width:600px){.bulk-controls{grid-template-columns:1fr}}.track-head .track-select-label{display:flex;align-items:center;gap:5px;color:var(--muted);font-size:11px;flex:none}
 .track-name{font-weight:750;overflow-wrap:anywhere;flex:1;min-width:0}
 .track-number{color:var(--accent);font-size:12px}
 .wave-wrap{position:relative;width:100%;margin:8px 0 12px}
@@ -160,6 +161,22 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:25px}
           <button id="bulkMuteBtn" class="secondary" type="button" disabled>選択をミュート</button>
           <button id="bulkSoloBtn" class="secondary" type="button" disabled>選択をソロ</button>
           <button id="bulkDeleteBtn" class="danger" type="button" disabled>選択を削除</button>
+        </div>
+        <div class="bulk-controls">
+          <div class="field">
+            <label for="bulkVolume">選択トラックの音量（%）</label>
+            <div class="row">
+              <input id="bulkVolume" type="number" min="0" max="200" step="1" value="100" disabled>
+              <button id="bulkVolumeApplyBtn" class="secondary" type="button" disabled>音量を適用</button>
+            </div>
+          </div>
+          <div class="field">
+            <label for="bulkPosition">開始位置の移動（秒）</label>
+            <div class="row">
+              <input id="bulkPosition" type="number" min="-3600" max="3600" step="0.01" value="0.10" disabled>
+              <button id="bulkPositionApplyBtn" class="secondary" type="button" disabled>一括移動</button>
+            </div>
+          </div>
         </div>
         <p class="muted">チェックしたトラックにまとめて操作できます。削除は取り消し可能です。</p>
         <div id="trackList">
@@ -469,6 +486,10 @@ function updateButtons() {
   $("bulkMuteBtn").disabled = busy || selectedCount === 0;
   $("bulkSoloBtn").disabled = busy || selectedCount === 0;
   $("bulkDeleteBtn").disabled = busy || selectedCount === 0;
+  $("bulkVolume").disabled = busy || selectedCount === 0;
+  $("bulkVolumeApplyBtn").disabled = busy || selectedCount === 0;
+  $("bulkPosition").disabled = busy || selectedCount === 0;
+  $("bulkPositionApplyBtn").disabled = busy || selectedCount === 0;
   $("bulkMuteBtn").textContent = selectedCount > 0 && tracks.filter(t => selectedTrackIds.has(t.id)).every(t => t.muted) ? "選択のミュート解除" : "選択をミュート";
   $("bulkSoloBtn").textContent = selectedCount > 0 && tracks.filter(t => selectedTrackIds.has(t.id)).every(t => t.solo) ? "選択のソロ解除" : "選択をソロ";
   $("trackCount").textContent = tracks.length + " tracks / 選択 " + selectedCount;
@@ -1976,6 +1997,38 @@ $("bulkSoloBtn").addEventListener("click", () => {
   renderTracks();
   status(nextSolo ? selected.length + "個のトラックをソロにしました。" : selected.length + "個のトラックのソロを解除しました。");
 });
+$("bulkVolumeApplyBtn").addEventListener("click", () => {
+  if (busy || !selectedTrackIds.size) return;
+  const value = Number($("bulkVolume").value);
+  if (!Number.isFinite(value) || value < 0 || value > 200) {
+    status("音量は0～200%で指定してください。");
+    return;
+  }
+  recordHistory();
+  stopPlayback();
+  tracks.forEach(track => {
+    if (selectedTrackIds.has(track.id)) track.volume = value / 100;
+  });
+  renderTracks();
+  status(selectedTrackIds.size + "個のトラックの音量を" + value + "%に設定しました。");
+});
+$("bulkPositionApplyBtn").addEventListener("click", () => {
+  if (busy || !selectedTrackIds.size) return;
+  const delta = Number($("bulkPosition").value);
+  if (!Number.isFinite(delta) || delta < -3600 || delta > 3600) {
+    status("移動量は−3600～3600秒で指定してください。");
+    return;
+  }
+  recordHistory();
+  stopPlayback();
+  tracks.forEach(track => {
+    if (selectedTrackIds.has(track.id)) track.position = Math.max(0, track.position + delta);
+  });
+  renderTracks();
+  drawTimeline();
+  status(selectedTrackIds.size + "個のトラックを" + (delta >= 0 ? "+" : "") + delta.toFixed(2) + "秒移動しました。Ctrl+Zで戻せます。");
+});
+
 $("bulkDeleteBtn").addEventListener("click", () => {
   if (busy || !selectedTrackIds.size) return;
   const count = selectedTrackIds.size;
