@@ -220,6 +220,18 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:25px}
           </select>
         </div>
         <div class="toolbar" style="margin-top:8px"><button id="previewArrangeBtn" class="secondary" disabled>配置案をプレビュー</button><button id="arrangeBtn" class="secondary" disabled>リズム配置案を適用</button></div>
+        <div class="field" style="margin-top:10px">
+          <label for="repeatSource">拍に合わせて反復する素材</label>
+          <select id="repeatSource" aria-label="反復するトラック"></select>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <div class="field">
+            <label for="repeatCount">追加する反復数</label>
+            <input id="repeatCount" type="number" min="1" max="32" step="1" value="4">
+          </div>
+          <button id="repeatTrackBtn" class="secondary" disabled>拍に合わせて刻み複製</button>
+        </div>
+        <p class="muted">選んだ素材を指定した拍の間隔で複製します。元の素材は残り、Ctrl+Zで取り消せます。</p>
         <pre id="arrangePreview" class="ai-plan" aria-live="polite" hidden></pre>
         <p class="muted">適用すると、既存トラックの開始位置をBPMに合わせて並べ替えます。音声自体は複製・削除せず、Ctrl+Zで元に戻せます。</p>
         <pre id="aiPlan" class="ai-plan" aria-live="polite">音声素材を追加すると、解析して編集案を作成できます。</pre>
@@ -362,6 +374,21 @@ function setBusy(value) {
   renderTracks();
 }
 
+function updateRepeatSourceOptions() {
+  const select = $("repeatSource");
+  if (!select) return;
+  const previous = select.value;
+  select.replaceChildren();
+  for (const track of tracks) {
+    const option = document.createElement("option");
+    option.value = String(track.id);
+    option.textContent = track.name;
+    select.append(option);
+  }
+  if (tracks.some(track => String(track.id) === previous)) select.value = previous;
+  else if (tracks.length) select.value = String(tracks[0].id);
+}
+
 function updateBpmSourceOptions() {
   const select = $("bpmSource");
   if (!select) return;
@@ -380,6 +407,8 @@ function updateBpmSourceOptions() {
 function updateButtons() {
   const hasTracks = tracks.length > 0;
   updateBpmSourceOptions();
+  updateRepeatSourceOptions();
+  $("repeatTrackBtn").disabled = busy || !hasTracks;
   playBtn.disabled = busy || !hasTracks;
   exportBtn.disabled = busy || !hasTracks;
   $("detectBpmBtn").disabled = busy || !hasTracks;
@@ -1059,6 +1088,38 @@ function drawTimeline() {
 // BPMや分割単位を変更したら、拍グリッドを即座に更新する。
 $("bpmInput").addEventListener("input", drawTimeline);
 $("snapDivision").addEventListener("change", drawTimeline);
+
+$("repeatTrackBtn").addEventListener("click", () => {
+  if (busy || !tracks.length) return;
+  const selectedId = Number($("repeatSource").value);
+  const source = tracks.find(track => track.id === selectedId);
+  const count = Math.floor(Number($("repeatCount").value));
+  const bpm = Number(bpmInput.value);
+  const division = Number($("snapDivision").value);
+  if (!source) { status("反復するトラックを選択してください。"); return; }
+  if (!Number.isFinite(count) || count < 1 || count > 32) {
+    status("反復数は1〜32の整数にしてください。"); return;
+  }
+  if (!Number.isFinite(bpm) || bpm < 40 || bpm > 240) {
+    status("BPMは40〜240の範囲で入力してください。"); return;
+  }
+  const interval = 60 / bpm / Math.max(1, division);
+  recordHistory();
+  const copies = [];
+  for (let i = 1; i <= count; i++) {
+    copies.push({
+      ...source,
+      id: makeId(),
+      name: source.name + " (刻み " + i + ")",
+      position: source.position + interval * i
+    });
+  }
+  const sourceIndex = tracks.findIndex(track => track.id === source.id);
+  tracks.splice(sourceIndex + 1, 0, ...copies);
+  renderTracks();
+  drawTimeline();
+  status("「" + source.name + "」を " + count + " 回、" + interval.toFixed(3) + " 秒間隔で複製しました。Ctrl+Zで取り消せます。");
+});
 
 $("previewArrangeBtn").addEventListener("click", () => {
   if (busy || tracks.length < 2) return;
