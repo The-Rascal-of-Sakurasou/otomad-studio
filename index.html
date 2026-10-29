@@ -1540,7 +1540,9 @@ $("previewArrangeBtn").addEventListener("click", () => {
   const total = Math.max(unchangedEnd, ...rows.map(row => row.position + row.duration));
   const preview = $("arrangePreview");
   preview.hidden = false;
-  preview.textContent = "配置プレビュー（BPM " + bpm + "・対象 " + targetTracks.length + " トラック）\\n" +
+  const modeLabel = mode === "sequence" ? "順番に配置" : mode === "reverse" ? "逆順配置" : mode === "onset" ? "立ち上がり同期" : mode === "stagger" ? "交互配置" : "細かい刻み";
+  preview.textContent = "配置プレビュー（" + modeLabel + "・BPM " + bpm + "・対象 " + targetTracks.length + " トラック）\\n" +
+    "スナップ間隔：" + interval.toFixed(3) + " 秒（1拍 " + beat.toFixed(3) + " 秒）\\n\\n" +
     rows.map((row, index) => (index + 1) + ". " + row.name + "\\n   開始 " +
       row.position.toFixed(2) + " 秒 / 終了 " + (row.position + row.duration).toFixed(2) + " 秒")
       .join("\\n") + "\\n\\n配置後の総時間：約" + total.toFixed(2) +
