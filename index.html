@@ -178,7 +178,20 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:25px}
             </div>
           </div>
         </div>
-        <p class="muted">チェックしたトラックにまとめて操作できます。削除は取り消し可能です。</p>
+        <div class="bulk-controls">
+          <div class="field">
+            <label for="bulkBeatSteps">選択トラックを拍単位で移動</label>
+            <div class="row">
+              <input id="bulkBeatSteps" type="number" min="-128" max="128" step="1" value="1" disabled>
+              <button id="bulkBeatApplyBtn" class="secondary" type="button" disabled>拍単位で移動</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>選択トラックの位置を拍グリッドに整列</label>
+            <button id="bulkAlignBtn" class="secondary" type="button" disabled>グリッドに整列</button>
+          </div>
+        </div>
+        <p class="muted">チェックしたトラックにまとめて操作できます。拍単位の移動はBPMと「拍の分割」の設定に従います。削除や位置変更はCtrl+Zで取り消せます。</p>
         <div id="trackList">
           <div class="empty">音声ファイルを追加すると、ここにトラックが表示されます。</div>
         </div>
@@ -490,6 +503,9 @@ function updateButtons() {
   $("bulkVolumeApplyBtn").disabled = busy || selectedCount === 0;
   $("bulkPosition").disabled = busy || selectedCount === 0;
   $("bulkPositionApplyBtn").disabled = busy || selectedCount === 0;
+  $("bulkBeatSteps").disabled = busy || selectedCount === 0;
+  $("bulkBeatApplyBtn").disabled = busy || selectedCount === 0;
+  $("bulkAlignBtn").disabled = busy || selectedCount === 0;
   $("bulkMuteBtn").textContent = selectedCount > 0 && tracks.filter(t => selectedTrackIds.has(t.id)).every(t => t.muted) ? "選択のミュート解除" : "選択をミュート";
   $("bulkSoloBtn").textContent = selectedCount > 0 && tracks.filter(t => selectedTrackIds.has(t.id)).every(t => t.solo) ? "選択のソロ解除" : "選択をソロ";
   $("trackCount").textContent = tracks.length + " tracks / 選択 " + selectedCount;
@@ -2012,6 +2028,40 @@ $("bulkVolumeApplyBtn").addEventListener("click", () => {
   renderTracks();
   status(selectedTrackIds.size + "個のトラックの音量を" + value + "%に設定しました。");
 });
+$("bulkBeatApplyBtn").addEventListener("click", () => {
+  if (busy || !selectedTrackIds.size) return;
+  const steps = Number($("bulkBeatSteps").value);
+  if (!Number.isInteger(steps) || steps < -128 || steps > 128) {
+    status("移動する分割数は−128～128の整数で指定してください。");
+    return;
+  }
+  const bpm = clamp(Number(bpmInput.value) || 120, 40, 240);
+  const division = Math.max(1, Number($("snapDivision").value) || 1);
+  const delta = steps * 60 / bpm / division;
+  recordHistory();
+  stopPlayback();
+  tracks.forEach(track => {
+    if (selectedTrackIds.has(track.id)) track.position = Math.max(0, track.position + delta);
+  });
+  renderTracks();
+  drawTimeline();
+  status(selectedTrackIds.size + "個のトラックを" + (delta >= 0 ? "+" : "") + delta.toFixed(3) + "秒（" + steps + "分割）移動しました。Ctrl+Zで戻せます。");
+});
+$("bulkAlignBtn").addEventListener("click", () => {
+  if (busy || !selectedTrackIds.size) return;
+  const bpm = clamp(Number(bpmInput.value) || 120, 40, 240);
+  const division = Math.max(1, Number($("snapDivision").value) || 1);
+  const step = 60 / bpm / division;
+  recordHistory();
+  stopPlayback();
+  tracks.forEach(track => {
+    if (selectedTrackIds.has(track.id)) track.position = Math.max(0, Math.round(track.position / step) * step);
+  });
+  renderTracks();
+  drawTimeline();
+  status(selectedTrackIds.size + "個のトラックを最寄りの拍グリッドに整列しました。Ctrl+Zで戻せます。");
+});
+
 $("bulkPositionApplyBtn").addEventListener("click", () => {
   if (busy || !selectedTrackIds.size) return;
   const delta = Number($("bulkPosition").value);
