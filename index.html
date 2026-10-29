@@ -1036,6 +1036,10 @@ function drawTimeline() {
     (timelineZoom > 1 ? "（拡大 " + timelineZoom.toFixed(1) + "×）" : "（全体）");
 }
 
+// BPMや分割単位を変更したら、拍グリッドを即座に更新する。
+$("bpmInput").addEventListener("input", drawTimeline);
+$("snapDivision").addEventListener("change", drawTimeline);
+
 $("arrangeBtn").addEventListener("click", () => {
   if (busy || tracks.length < 2) return;
   const bpm = clamp(Number(bpmInput.value) || 120, 40, 240);
