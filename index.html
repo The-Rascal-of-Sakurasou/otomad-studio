@@ -350,6 +350,7 @@ button:disabled{cursor:not-allowed;opacity:.48}
             </select>
           </div>
           <button id="sliceTrackBtn" class="secondary" disabled>選択素材を等分する</button><button id="transientSliceBtn" class="secondary" disabled>立ち上がりで自動刻み</button>
+        <div class="field" style="min-width:180px"><label for="transientSensitivity">自動刻みの感度：<span id="transientSensitivityLabel">5/10</span></label><input id="transientSensitivity" type="range" min="1" max="10" step="1" value="5"></div>
         </div>
         <p class="muted">選択した素材の使用範囲を等分し、元の位置から順番に並べた別トラックにします。元の素材は置き換わり、Ctrl+Zで戻せます。</p>
         <p class="muted">選んだ素材を指定した拍の間隔で複製します。元の素材は残り、Ctrl+Zで取り消せます。</p>
@@ -1356,6 +1357,10 @@ $("sliceTrackBtn").addEventListener("click", () => {
   status("「" + source.name + "」を " + count + " 個の素材に等分しました。Ctrl+Zで元に戻せます。");
 });
 
+$("transientSensitivity").addEventListener("input", () => {
+  $("transientSensitivityLabel").textContent = $("transientSensitivity").value + "/10";
+});
+
 $("transientSliceBtn").addEventListener("click", () => {
   if (busy || !tracks.length) return;
   const sourceId = Number($("repeatSource").value);
@@ -1365,7 +1370,7 @@ $("transientSliceBtn").addEventListener("click", () => {
   const bpm = clamp(Number(bpmInput.value) || 120, 40, 240);
   const division = Math.max(1, Number($("snapDivision").value) || 4);
   const interval = 60 / bpm / division;
-  const candidates = detectTransientCandidates(source.buffer)
+  const candidates = detectTransientCandidates(source.buffer, Number($("transientSensitivity").value))
     .filter(item => item.time >= source.startTrim && item.time < source.end)
     .map(item => item.time)
     .filter((time, i, list) => i === 0 || time - list[i-1] >= 0.12);
@@ -2420,7 +2425,11 @@ function analyzeAudioBuffer(buffer) {
   }
   return {duration:buffer.duration,rms:Math.sqrt(sumSquares/Math.max(1,frames)),peak:peak,crestFactor:peak/Math.max(1e-9,Math.sqrt(sumSquares/Math.max(1,frames))),quietRatio:quietFrames/Math.max(1,frames),zeroCrossingRate:crossings/Math.max(1,crossingPairs),stereoBalance:right?((Math.sqrt(rightEnergy)-Math.sqrt(leftEnergy))/(Math.sqrt(rightEnergy)+Math.sqrt(leftEnergy)+1e-9)):null,quietRegions:quietRegions};
 }
-function detectTransientCandidates(buffer) {
+function detectTransientCandidates(buffer, sensitivity = 5) {
+  sensitivity = clamp(Number(sensitivity) || 5, 1, 10);
+  const amplitudeThreshold = 0.005 + (10 - sensitivity) * 0.004;
+  const riseThreshold = 0.002 + (10 - sensitivity) * 0.002;
+  const minPeakGapFrames = Math.max(2, 11 - sensitivity);
   const step = Math.max(1, Math.floor(buffer.sampleRate * 0.02));
   const channels = Array.from({ length: buffer.numberOfChannels }, (_, i) => buffer.getChannelData(i));
   const frames = Math.ceil(buffer.length / step);
@@ -2438,7 +2447,7 @@ function detectTransientCandidates(buffer) {
     const local = Math.max(envelope[i - 2], envelope[i - 1], envelope[i + 1], envelope[i + 2]);
     const baseline = (envelope[i - 2] + envelope[i - 1]) / 2;
     const rise = envelope[i] - baseline;
-    if (envelope[i] >= local && envelope[i] > 0.025 && rise > 0.012 && i - lastFrame >= 6) {
+    if (envelope[i] >= local && envelope[i] > amplitudeThreshold && rise > riseThreshold && i - lastFrame >= minPeakGapFrames) {
       peaks.push({ time: i * step / buffer.sampleRate, strength: envelope[i] });
       lastFrame = i;
     }
@@ -2446,7 +2455,7 @@ function detectTransientCandidates(buffer) {
   if (peaks.length > 1) {
     const strengths = peaks.map(p => p.strength).sort((a,b) => a-b);
     const threshold = strengths[Math.floor((strengths.length - 1) * 0.35)];
-    return peaks.filter(p => p.strength >= threshold).slice(0, 20);
+    return peaks.filter(p => p.strength >= threshold).slice(0, 40);
   }
   return peaks;
 }
