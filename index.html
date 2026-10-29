@@ -324,7 +324,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:25px}
               <option value="16">16分割</option>
             </select>
           </div>
-          <button id="sliceTrackBtn" class="secondary" disabled>選択素材を等分する</button>
+          <button id="sliceTrackBtn" class="secondary" disabled>選択素材を等分する</button><button id="transientSliceBtn" class="secondary" disabled>立ち上がりで自動刻み</button>
         </div>
         <p class="muted">選択した素材の使用範囲を等分し、元の位置から順番に並べた別トラックにします。元の素材は置き換わり、Ctrl+Zで戻せます。</p>
         <p class="muted">選んだ素材を指定した拍の間隔で複製します。元の素材は残り、Ctrl+Zで取り消せます。</p>
@@ -1328,6 +1328,56 @@ $("sliceTrackBtn").addEventListener("click", () => {
   renderTracks();
   drawTimeline();
   status("「" + source.name + "」を " + count + " 個の素材に等分しました。Ctrl+Zで元に戻せます。");
+});
+
+$("transientSliceBtn").addEventListener("click", () => {
+  if (busy || !tracks.length) return;
+  const sourceId = Number($("repeatSource").value);
+  const index = tracks.findIndex(track => track.id === sourceId);
+  if (index < 0) { status("自動刻みするトラックを選択してください。"); return; }
+  const source = tracks[index];
+  const bpm = clamp(Number(bpmInput.value) || 120, 40, 240);
+  const division = Math.max(1, Number($("snapDivision").value) || 4);
+  const interval = 60 / bpm / division;
+  const candidates = detectTransientCandidates(source.buffer)
+    .filter(item => item.time >= source.startTrim && item.time < source.end)
+    .map(item => item.time)
+    .filter((time, i, list) => i === 0 || time - list[i-1] >= 0.12);
+  const boundaries = [source.startTrim, ...candidates.filter(time => time > source.startTrim + 0.08).slice(0, 15), source.end]
+    .filter((time, i, list) => i === 0 || time - list[i-1] >= 0.12);
+  if (boundaries.length < 3) {
+    status("十分に明瞭な立ち上がりが検出されませんでした。別の素材か手動分割を試してください。");
+    return;
+  }
+  const ranges = [];
+  for (let i = 0; i < boundaries.length - 1; i++) {
+    const startTrim = boundaries[i], end = boundaries[i+1];
+    if (end - startTrim >= 0.12) ranges.push({startTrim,end});
+  }
+  if (ranges.length < 2) {
+    status("自動刻みできる区間が足りませんでした。");
+    return;
+  }
+  recordHistory();
+  const outputDuration = (source.end - source.startTrim) / Math.pow(2, source.pitch / 12);
+  const segments = ranges.map((range, i) => {
+    const segmentDuration = range.end - range.startTrim;
+    return {
+      ...source,
+      id: i === 0 ? source.id : makeId(),
+      name: source.name + " (自動刻み " + (i+1) + "/" + ranges.length + ")",
+      startTrim: range.startTrim,
+      end: range.end,
+      position: source.position + i * interval,
+      fadeIn: Math.min(source.fadeIn, segmentDuration),
+      fadeOut: Math.min(source.fadeOut, segmentDuration)
+    };
+  });
+  tracks.splice(index, 1, ...segments);
+  seekOffset = 0;
+  renderTracks();
+  drawTimeline();
+  status("音の立ち上がり候補を基準に " + segments.length + " 個へ分割し、" + interval.toFixed(3) + " 秒間隔で配置しました。検出は音量変化による概算です。Ctrl+Zで戻せます。");
 });
 
 $("repeatTrackBtn").addEventListener("click", () => {
