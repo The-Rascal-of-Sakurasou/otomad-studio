@@ -900,6 +900,7 @@ function renderTracks() {
     duplicate.textContent = "複製";
     duplicate.disabled = busy;
     duplicate.addEventListener("click", () => {
+      recordHistory();
       const copy = {
         ...track,
         id: makeId(),
@@ -916,6 +917,7 @@ function renderTracks() {
     split.textContent = "分割";
     split.disabled = busy || getTrackDuration(track) < 0.1;
     split.addEventListener("click", () => {
+      recordHistory();
       const middle = (track.startTrim + track.end) / 2;
       if (middle <= track.startTrim || middle >= track.end) return;
 
@@ -943,6 +945,7 @@ function renderTracks() {
     remove.textContent = "削除";
     remove.disabled = busy;
     remove.addEventListener("click", () => {
+      recordHistory();
       stopPlayback();
       tracks = tracks.filter(t => t.id !== track.id);
       renderTracks();
@@ -1027,10 +1030,14 @@ function renderTracks() {
 
     effects.append(
       createCheck("ミュート", track.muted, v => {
+        recordHistory();
+        stopPlayback();
         track.muted = v;
         renderTracks();
       }),
       createCheck("ソロ", track.solo, v => {
+        recordHistory();
+        stopPlayback();
         track.solo = v;
         renderTracks();
       })
