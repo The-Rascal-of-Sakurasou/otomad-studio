@@ -193,6 +193,13 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:25px}
           <button id="snapBtn" class="secondary">開始位置を拍に合わせる</button>
           <button id="snapTransientBtn" class="secondary">音の立ち上がりを拍に合わせる</button>
         </div>
+        <div class="toolbar" style="margin-top:8px">
+          <label class="muted" for="nudgeSource" style="align-self:center">微調整するトラック</label>
+          <select id="nudgeSource" aria-label="微調整するトラック"></select>
+          <button id="nudgeBackBtn" class="secondary" disabled>− 1分割</button>
+          <button id="nudgeForwardBtn" class="secondary" disabled>＋ 1分割</button>
+        </div>
+        <p class="muted">選択トラックを拍の分割単位で前後に微調整します。位置は0秒より前にならず、Ctrl+Zで戻せます。</p>
         <div class="field">
           <label for="snapDivision">拍の分割</label>
           <select id="snapDivision">
@@ -395,6 +402,21 @@ function setBusy(value) {
   renderTracks();
 }
 
+function updateNudgeSourceOptions() {
+  const select = $("nudgeSource");
+  if (!select) return;
+  const previous = select.value;
+  select.replaceChildren();
+  for (const track of tracks) {
+    const option = document.createElement("option");
+    option.value = String(track.id);
+    option.textContent = track.name;
+    select.append(option);
+  }
+  if (tracks.some(track => String(track.id) === previous)) select.value = previous;
+  else if (tracks.length) select.value = String(tracks[0].id);
+}
+
 function updateRepeatSourceOptions() {
   const select = $("repeatSource");
   if (!select) return;
@@ -426,10 +448,13 @@ function updateBpmSourceOptions() {
 }
 
 function updateButtons() {
-  $("sliceTrackBtn").disabled = busy || !hasTracks;
   const hasTracks = tracks.length > 0;
+  $("sliceTrackBtn").disabled = busy || !hasTracks;
   updateBpmSourceOptions();
   updateRepeatSourceOptions();
+  updateNudgeSourceOptions();
+  $("nudgeBackBtn").disabled = busy || !hasTracks;
+  $("nudgeForwardBtn").disabled = busy || !hasTracks;
   $("repeatTrackBtn").disabled = busy || !hasTracks;
   playBtn.disabled = busy || !hasTracks;
   exportBtn.disabled = busy || !hasTracks;
@@ -1110,6 +1135,22 @@ function drawTimeline() {
 // BPMや分割単位を変更したら、拍グリッドを即座に更新する。
 $("bpmInput").addEventListener("input", drawTimeline);
 $("snapDivision").addEventListener("change", drawTimeline);
+
+function nudgeSelectedTrack(direction) {
+  if (busy) return;
+  const track = tracks.find(item => item.id === Number($("nudgeSource").value));
+  if (!track) { status("微調整するトラックを選択してください。"); return; }
+  const bpm = clamp(Number(bpmInput.value) || 120, 40, 240);
+  const division = Math.max(1, Number($("snapDivision").value) || 1);
+  const step = 60 / bpm / division;
+  recordHistory();
+  track.position = Math.max(0, track.position + direction * step);
+  renderTracks();
+  drawTimeline();
+  status("「" + track.name + "」を " + (direction < 0 ? "前へ" : "後ろへ") + step.toFixed(3) + " 秒移動しました。Ctrl+Zで戻せます。");
+}
+$("nudgeBackBtn").addEventListener("click", () => nudgeSelectedTrack(-1));
+$("nudgeForwardBtn").addEventListener("click", () => nudgeSelectedTrack(1));
 
 $("sliceTrackBtn").addEventListener("click", () => {
   if (busy || !tracks.length) return;
