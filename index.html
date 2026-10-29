@@ -1777,6 +1777,37 @@ function analyzeAudioBuffer(buffer) {
   }
   return {duration:buffer.duration,rms:Math.sqrt(sumSquares/Math.max(1,frames)),peak:peak,quietRatio:quietFrames/Math.max(1,frames),quietRegions:quietRegions};
 }
+function detectTransientCandidates(buffer) {
+  const step = Math.max(1, Math.floor(buffer.sampleRate * 0.02));
+  const channels = Array.from({ length: buffer.numberOfChannels }, (_, i) => buffer.getChannelData(i));
+  const frames = Math.ceil(buffer.length / step);
+  if (frames < 8) return [];
+  const envelope = new Float32Array(frames);
+  for (let frame = 0; frame < frames; frame++) {
+    const start = frame * step, end = Math.min(buffer.length, start + step);
+    let energy = 0, count = 0;
+    for (const channel of channels) for (let i = start; i < end; i += 4) { energy += channel[i] * channel[i]; count++; }
+    envelope[frame] = Math.sqrt(energy / Math.max(1, count));
+  }
+  const peaks = [];
+  let lastFrame = -10;
+  for (let i = 2; i < frames - 2; i++) {
+    const local = Math.max(envelope[i - 2], envelope[i - 1], envelope[i + 1], envelope[i + 2]);
+    const baseline = (envelope[i - 2] + envelope[i - 1]) / 2;
+    const rise = envelope[i] - baseline;
+    if (envelope[i] >= local && envelope[i] > 0.025 && rise > 0.012 && i - lastFrame >= 6) {
+      peaks.push({ time: i * step / buffer.sampleRate, strength: envelope[i] });
+      lastFrame = i;
+    }
+  }
+  if (peaks.length > 1) {
+    const strengths = peaks.map(p => p.strength).sort((a,b) => a-b);
+    const threshold = strengths[Math.floor((strengths.length - 1) * 0.35)];
+    return peaks.filter(p => p.strength >= threshold).slice(0, 20);
+  }
+  return peaks;
+}
+
 let lastAiPlan = "";
 $("analyzeBtn").addEventListener("click", () => {
   if (!tracks.length || busy) return;
@@ -1787,8 +1818,15 @@ $("analyzeBtn").addEventListener("click", () => {
     "プロジェクト：" + tracks.length + "トラック / BPM " + bpm + " / 1拍 " + beat.toFixed(3) + "秒",
     "ミックス予定時間：約" + getMixDuration().toFixed(2) + "秒", "", "【素材の解析】"];
   const quietJumps = [];
+  const transientJumps = [];
   tracks.forEach((track,index) => {
     const m = analyzeAudioBuffer(track.buffer);
+    const transients = detectTransientCandidates(track.buffer).filter(item => item.time >= track.startTrim && item.time <= track.end);
+    lines.push("   音の立ち上がり候補：" + (transients.length ? transients.slice(0, 10).map(item => item.time.toFixed(2) + "秒").join("、") + (transients.length > 10 ? " ほか" : "") : "明瞭な候補なし") + "（音量変化による概算）");
+    transients.slice(0, 8).forEach(item => transientJumps.push({
+      label: track.name + "：" + item.time.toFixed(2) + "秒",
+      time: track.position + (item.time - track.startTrim) / Math.pow(2, track.pitch / 12)
+    }));
     const category = m.duration < 1.2 ? "短い素材・刻み向き" : m.duration > 8 ? "長めの素材・背景/セリフ向き" : "中程度の素材";
     lines.push((index+1) + ". " + track.name);
     lines.push("   長さ " + m.duration.toFixed(2) + "秒 / RMS " + m.rms.toFixed(3) + " / 最大ピーク " + m.peak.toFixed(3) + " / 低音量区間 約" + Math.round(m.quietRatio*100) + "%");
@@ -1823,26 +1861,30 @@ $("analyzeBtn").addEventListener("click", () => {
   $("aiPlan").textContent = lastAiPlan;
   const jumpList = $("quietJumpList");
   jumpList.replaceChildren();
-  quietJumps.slice(0, 30).forEach(item => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "secondary";
-    button.textContent = "移動：" + item.label;
-    button.addEventListener("click", () => {
-      seekOffset = clamp(item.time, 0, getMixDuration());
-      $("seekSlider").value = String(seekOffset);
-      $("seekLabel").textContent = seekOffset.toFixed(2) + " 秒";
-      drawTimeline();
-      status("無音候補の位置 " + seekOffset.toFixed(2) + " 秒に移動しました。");
+  const addJumpButtons = (items, prefix, emptyText) => {
+    items.slice(0, 30).forEach(item => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "secondary";
+      button.textContent = prefix + item.label;
+      button.addEventListener("click", () => {
+        seekOffset = clamp(item.time, 0, getMixDuration());
+        $("seekSlider").value = String(seekOffset);
+        $("seekLabel").textContent = seekOffset.toFixed(2) + " 秒";
+        drawTimeline();
+        status("再生位置を " + seekOffset.toFixed(2) + " 秒に移動しました。");
+      });
+      jumpList.append(button);
     });
-    jumpList.append(button);
-  });
-  if (!quietJumps.length) {
-    const note = document.createElement("span");
-    note.className = "muted";
-    note.textContent = "移動できる無音候補はありません。";
-    jumpList.append(note);
-  }
+    if (!items.length) {
+      const note = document.createElement("span");
+      note.className = "muted";
+      note.textContent = emptyText;
+      jumpList.append(note);
+    }
+  };
+  addJumpButtons(transientJumps, "立ち上がり：", "移動できる音の立ち上がり候補はありません。");
+  addJumpButtons(quietJumps, "無音候補：", "移動できる無音候補はありません。");
   $("copyPlanBtn").disabled = false;
   status("素材の数値解析と編集案の作成が完了しました。");
 });
