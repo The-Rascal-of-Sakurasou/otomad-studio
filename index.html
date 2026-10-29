@@ -80,6 +80,7 @@ border-radius:9px;color:var(--muted);font-size:13px}
 .timeline-box{overflow-x:auto;background:#14141b;border-radius:8px;padding:10px}
 #timeline{display:block;min-width:650px;width:100%;height:110px}
 .timeline-tools{align-items:center;margin-top:10px}.timeline-tools .stat{margin-left:auto}
+.ai-plan{white-space:pre-wrap;overflow-wrap:anywhere;background:#111117;border:1px solid var(--border);border-radius:8px;padding:12px;min-height:90px;font:13px/1.6 ui-monospace,monospace;color:var(--text)}
 #timeline{cursor:grab;touch-action:none}#timeline.is-moving{cursor:grabbing;outline:1px solid var(--accent)}
 .badge{font-size:10px;background:#343044;color:#ddd6fe;
 padding:3px 6px;border-radius:5px}
@@ -199,6 +200,13 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:25px}
         無音・声・複雑な音楽では誤差が大きくなる場合があります。</p>
       </section>
 
+      <section class="panel">
+        <h2>AI制作アシスタント（ローカル解析）</h2>
+        <p class="muted">素材の長さ・音量・ピークをブラウザ内で解析し、編集計画のたたき台を作ります。生成AIモデルではなく、外部API接続なしで動く補助機能です。</p>
+        <div class="field"><label for="aiGoal">作りたい音MADの方向性</label><select id="aiGoal"><option value="rhythm">リズム重視・細かい刻み</option><option value="voice">セリフ中心・聞き取りやすさ</option><option value="chaos">テンポの速いカオス系</option><option value="music">原曲に合わせた音程・リズム</option></select></div>
+        <div class="toolbar"><button id="analyzeBtn" class="secondary" disabled>素材を解析して編集案を作成</button><button id="copyPlanBtn" class="secondary" disabled>編集案をコピー</button></div>
+        <pre id="aiPlan" class="ai-plan" aria-live="polite">音声素材を追加すると、解析して編集案を作成できます。</pre>
+      </section>
       <section class="panel">
         <h2>編集情報</h2>
         <div class="row" style="margin-bottom:8px">
@@ -339,6 +347,7 @@ function updateButtons() {
   playBtn.disabled = busy || !hasTracks;
   exportBtn.disabled = busy || !hasTracks;
   $("detectBpmBtn").disabled = busy || !hasTracks;
+  $("analyzeBtn").disabled = busy || !hasTracks;
   $("importBtn").disabled = busy;
   $("stopBtn").disabled = playbackSources.length === 0;
   $("trackCount").textContent = tracks.length + " tracks";
@@ -1463,6 +1472,7 @@ $("snapBtn").addEventListener("click", () => {
   }
 
   const grid = 60 / bpm / division;
+  recordHistory();
 
   for (const track of tracks) {
     track.position = Math.max(
@@ -1632,6 +1642,56 @@ document.addEventListener("keydown", (event) => {
   } else if (event.key === "Escape" && playbackSources.length > 0) {
     stopPlayback();
     status("再生を停止しました。");
+  }
+});
+
+
+function analyzeAudioBuffer(buffer) {
+  const channel = buffer.getChannelData(0);
+  const step = Math.max(1, Math.floor(buffer.sampleRate * 0.025));
+  let sumSquares = 0, peak = 0, quietFrames = 0, frames = 0;
+  for (let i = 0; i < channel.length; i += step) {
+    const sample = channel[i], abs = Math.abs(sample);
+    sumSquares += sample * sample; peak = Math.max(peak, abs);
+    if (abs < 0.012) quietFrames++;
+    frames++;
+  }
+  return {duration:buffer.duration,rms:Math.sqrt(sumSquares/Math.max(1,frames)),peak:peak,quietRatio:quietFrames/Math.max(1,frames)};
+}
+let lastAiPlan = "";
+$("analyzeBtn").addEventListener("click", () => {
+  if (!tracks.length || busy) return;
+  const bpm = clamp(Number(bpmInput.value) || 120, 40, 240);
+  const beat = 60 / bpm, goal = $("aiGoal").value;
+  const lines = ["OtoMAD Studio — 素材解析・編集案",
+    "※ブラウザ内の数値解析に基づく提案です。生成AIによる意味理解や自動編集ではありません。", "",
+    "プロジェクト：" + tracks.length + "トラック / BPM " + bpm + " / 1拍 " + beat.toFixed(3) + "秒",
+    "ミックス予定時間：約" + getMixDuration().toFixed(2) + "秒", "", "【素材の解析】"];
+  tracks.forEach((track,index) => {
+    const m = analyzeAudioBuffer(track.buffer);
+    const category = m.duration < 1.2 ? "短い素材・刻み向き" : m.duration > 8 ? "長めの素材・背景/セリフ向き" : "中程度の素材";
+    lines.push((index+1) + ". " + track.name);
+    lines.push("   長さ " + m.duration.toFixed(2) + "秒 / RMS " + m.rms.toFixed(3) + " / 最大ピーク " + m.peak.toFixed(3) + " / 低音量区間 約" + Math.round(m.quietRatio*100) + "%");
+    lines.push("   分類の目安：" + category);
+  });
+  lines.push("", "【編集の提案】");
+  if (goal === "rhythm") lines.push("- 拍の分割を1/4または1/8に設定し、短い素材でリズムを作る。","- 開始位置を拍グリッドに合わせ、複製で反復を作る。","- 重なりが多い箇所は音量とパンを調整する。");
+  else if (goal === "voice") lines.push("- セリフの子音や語尾が残るよう波形を確認する。","- 背景音より声を前に出し、フィルターは少しずつ調整する。","- セリフ間に短い空白を作り、聞き取りやすさを比較する。");
+  else if (goal === "chaos") lines.push("- 短い素材を複製し、1/4拍・1/8拍単位で配置を変える。","- ピッチを変えた複製は音量を控えめに混ぜる。","- 効果音を重ねすぎず、ミックスのピークを確認する。");
+  else lines.push("- 基準トラックの拍を確認してからBPMを設定する。","- 素材の開始位置を拍に合わせ、ピッチ変更による長さの変化に注意する。","- 素材のアタックと拍の頭が合っているか再生して確認する。");
+  lines.push("", "【注意】","- 音量値だけではセリフ・音楽・効果音を正確に分類できません。","- 編集案は自動適用されません。素材の著作権・利用許諾も確認してください。");
+  lastAiPlan = lines.join("\n");
+  $("aiPlan").textContent = lastAiPlan;
+  $("copyPlanBtn").disabled = false;
+  status("素材の数値解析と編集案の作成が完了しました。");
+});
+$("copyPlanBtn").addEventListener("click", async () => {
+  if (!lastAiPlan) return;
+  try { await navigator.clipboard.writeText(lastAiPlan); status("編集案をコピーしました。"); }
+  catch (_) {
+    const area = document.createElement("textarea"); area.value=lastAiPlan; document.body.append(area); area.select();
+    const ok=document.execCommand("copy"); area.remove();
+    status(ok ? "編集案をコピーしました。" : "コピーできませんでした。編集案を選択してコピーしてください。");
   }
 });
 
