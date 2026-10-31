@@ -342,6 +342,12 @@ details>summary{padding:4px 0}
 .step-guide a{min-height:91px;transition:background .15s,border-color .15s}
 .stat{line-height:1.4}
 .empty{padding:42px 14px;background:linear-gradient(180deg,#fbfcff,#f7f8fc)}
+.video-assets{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr));gap:12px;margin-top:12px}
+.video-asset{min-width:0;padding:10px;border:1px solid var(--border,#d9e0ed);border-radius:12px;background:var(--panel2,#f5f7fc)}
+.video-asset video{display:block;width:100%;max-height:260px;aspect-ratio:16/9;object-fit:contain;background:#111;border-radius:8px}
+.video-asset-name{margin:8px 0;overflow-wrap:anywhere;font-weight:650;font-size:13px}
+.video-asset .toolbar{padding:0!important;background:transparent!important;border:0!important}
+.video-asset .muted{font-size:12px}
 .image-asset{border-radius:10px}
 .image-asset img{height:112px}
 footer{padding:22px 12px}
@@ -732,6 +738,12 @@ a:hover{color:#312e81}
     <input id="fileInput" type="file" accept="audio/*,video/*,.mp4,.mov,.webm,.m4v,.mkv,.avi" multiple hidden>
     <input id="projectInput" type="file" accept=".json,application/json" hidden>
     <input id="imageInput" type="file" accept="image/*,.png,.jpg,.jpeg,.gif,.webp,.bmp,.avif" multiple hidden>
+    <section id="videoAssetsPanel" class="panel" style="margin-top:12px" aria-label="動画素材">
+      <div class="row spread"><h3 style="margin:0">動画素材</h3><div class="toolbar" style="margin:0"><button id="addVideosBtn" class="secondary" type="button">＋ 動画を追加</button><button id="clearVideosBtn" class="secondary" type="button" disabled>動画を全削除</button></div></div>
+      <p class="muted">動画をプレビューしながら音MADの素材として使えます。読み込み時に音声がある動画は音声トラックにも取り込みます。現在、動画映像そのものの合成・動画ファイルへの書き出しには対応していません。</p>
+      <input id="videoInput" type="file" accept="video/*,.mp4,.mov,.webm,.m4v,.mkv,.avi" multiple hidden>
+      <div id="videoAssets" class="video-assets"><p class="muted">動画はまだ追加されていません。</p></div>
+    </section>
     <section id="imageAssetsPanel" class="panel" style="margin-top:12px" aria-label="画像素材">
       <div class="row spread"><h3 style="margin:0">画像素材</h3><div class="toolbar" style="margin:0"><button id="addImagesBtn" class="secondary" type="button">＋ 画像を追加</button><button id="clearImagesBtn" class="secondary" type="button" disabled>画像を全削除</button></div></div>
       <p class="muted">画像を読み込んで参照素材として表示します。現在、画像は音声トラックやWAV書き出しには合成されません。</p>
@@ -1076,6 +1088,10 @@ const imageInput = $("imageInput");
 const imageAssets = $("imageAssets");
 const imageAssetUrls = new Map();
 const imageAssetFiles = new Map();
+const videoInput = $("videoInput");
+const videoAssets = $("videoAssets");
+const videoAssetUrls = new Map();
+const videoAssetFiles = new Map();
 // Cache waveform peak data per decoded buffer and display width so rerendering
 // tracks does not rescan every audio sample.
 const waveformPeakCache = new WeakMap();
@@ -1367,6 +1383,81 @@ function createTrack(name, buffer) {
 $("importBtn").addEventListener("click", () => fileInput.click());
 
 $("addImagesBtn").addEventListener("click", () => imageInput.click());
+$("addVideosBtn").addEventListener("click", () => videoInput.click());
+function updateVideoAssetControls() {
+  $("clearVideosBtn").disabled = videoAssetFiles.size === 0;
+}
+function addVideoAsset(file) {
+  if (!file || !(/^video\//i.test(file.type) || /\.(mp4|mov|webm|m4v|mkv|avi)$/i.test(file.name)) || !file.size) return false;
+  if (Array.from(videoAssetFiles.values()).some(existing => existing === file)) return false;
+  const url = URL.createObjectURL(file);
+  const id = "video-" + makeId() + "-" + videoAssetFiles.size;
+  videoAssetUrls.set(id, url);
+  videoAssetFiles.set(id, file);
+  const card = document.createElement("article");
+  card.className = "video-asset";
+  card.dataset.videoId = id;
+  const player = document.createElement("video");
+  player.src = url;
+  player.controls = true;
+  player.preload = "metadata";
+  player.playsInline = true;
+  player.setAttribute("aria-label", file.name + " のプレビュー");
+  const name = document.createElement("div");
+  name.className = "video-asset-name";
+  name.textContent = file.name;
+  const details = document.createElement("p");
+  details.className = "muted";
+  details.textContent = "動画プレビュー";
+  const remove = document.createElement("button");
+  remove.type = "button";
+  remove.className = "secondary";
+  remove.textContent = "動画を削除";
+  remove.addEventListener("click", () => {
+    player.pause();
+    URL.revokeObjectURL(url);
+    videoAssetUrls.delete(id);
+    videoAssetFiles.delete(id);
+    card.remove();
+    if (!videoAssets.querySelector(".video-asset")) {
+      videoAssets.replaceChildren();
+      const empty = document.createElement("p");
+      empty.className = "muted";
+      empty.textContent = "動画はまだ追加されていません。";
+      videoAssets.append(empty);
+    }
+    updateVideoAssetControls();
+  });
+  const actions = document.createElement("div");
+  actions.className = "toolbar";
+  actions.append(remove);
+  card.append(player, name, details, actions);
+  if (!videoAssets.querySelector(".video-asset")) videoAssets.replaceChildren();
+  videoAssets.append(card);
+  updateVideoAssetControls();
+  return true;
+}
+$("clearVideosBtn").addEventListener("click", () => {
+  if (!videoAssetFiles.size || !confirm("読み込んだ動画素材をすべて削除しますか？")) return;
+  for (const url of videoAssetUrls.values()) URL.revokeObjectURL(url);
+  videoAssetUrls.clear();
+  videoAssetFiles.clear();
+  videoAssets.replaceChildren();
+  const empty = document.createElement("p");
+  empty.className = "muted";
+  empty.textContent = "動画はまだ追加されていません。";
+  videoAssets.append(empty);
+  updateVideoAssetControls();
+  status("動画素材をすべて削除しました。");
+});
+videoInput.addEventListener("change", () => {
+  const files = Array.from(videoInput.files || []);
+  let added = 0;
+  for (const file of files) if (addVideoAsset(file)) added++;
+  videoInput.value = "";
+  status(added ? added + "本の動画をプレビュー素材として追加しました。" : "動画を追加できませんでした。対応する動画ファイルを選択してください。");
+});
+
 function updateImageAssetControls() {
   $("clearImagesBtn").disabled = imageAssetFiles.size === 0;
 }
@@ -1748,6 +1839,7 @@ async function loadAudioFiles(fileList) {
         const isVideo = /^video\//i.test(file.type) ||
           /\.(mp4|mov|webm|m4v|mkv|avi)$/i.test(file.name);
         if (isVideo) {
+          addVideoAsset(file);
           status("動画から音声を取り出しています：" + file.name + "（動画の長さ分、時間がかかります）");
           buffer = await extractAudioFromVideo(file, ctx);
         } else {
