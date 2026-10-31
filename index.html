@@ -256,6 +256,12 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   *,*::before,*::after{transition:none!important;animation:none!important}
 }
 
+/* AI transcription settings */
+.ai-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:12px 0 6px}
+.ai-options .field{min-width:0}
+.ai-options select{min-height:42px}
+@media(max-width:600px){.ai-options{grid-template-columns:1fr;gap:8px}}
+
 /* Follow-up polish: status visibility and light-theme consistency */
 .status{
   margin-top:12px;
@@ -498,7 +504,11 @@ input[type="range"]{accent-color:var(--accent)}
           <ol class="quick-start"><li>音声を追加したあと、作りたい方向性を選びます。</li><li>下の欄に希望を書き、「プロンプトで音MADを生成」を押します。</li><li>「再生して確認」で聴き、気に入らなければCtrl+Zで戻します。</li></ol>
         </div>
                 <div class="toolbar"><button id="autoGenerateBtn" class="green" disabled>プロンプトで音MADを生成</button><button id="aiTranscribeBtn" class="secondary" disabled>AIでセリフを文字起こし</button><button id="analyzeBtn" class="secondary" disabled>素材を解析して編集案を作成</button><button id="copyPlanBtn" class="secondary" disabled>編集案をコピー</button><button id="exportAnalysisBtn" class="secondary" disabled>解析データをJSON保存</button><button id="autoGainBtn" class="secondary" disabled>選択素材の音量を自動調整</button><button id="trimSilenceBtn" class="secondary" disabled>選択素材の前後の無音をカット</button><button id="prepareSelectedBtn" class="primary" disabled>選択素材をまとめて整える</button></div>
-        <p id="aiTranscribeHelp" class="muted">実験的なAI文字起こしは、ブラウザ内で音声認識モデルを読み込んで実行します。初回はモデルのダウンロードが必要で、時間と通信量がかかります。音声は外部の音声認識APIには送信しませんが、モデル取得のためインターネット接続が必要です。認識結果は誤る場合があります。</p><div id="aiTranscriptResults" class="help-box" style="display:none;white-space:pre-wrap;overflow-wrap:anywhere;margin:8px 0" aria-live="polite"></div><div class="toolbar"><button id="exportSrtBtn" class="secondary" type="button" disabled>字幕をSRTで書き出す</button><button id="copyTranscriptBtn" class="secondary" type="button" disabled>文字起こしをコピー</button></div><p class="muted">補助機能：<strong>素材を解析</strong>は編集案を作るだけ、<strong>音量を自動調整</strong>と<strong>無音をカット</strong>は選択した素材に処理を加えます。迷ったら、まず自動生成だけ試してください。</p>
+        <div class="ai-options" aria-label="AI文字起こし設定">
+          <div class="field"><label for="aiModel">音声認識モデル</label><select id="aiModel"><option value="Xenova/whisper-tiny">軽量・高速（tiny）</option><option value="Xenova/whisper-base">標準（base）</option><option value="Xenova/whisper-small">高精度優先（small）</option></select></div>
+          <div class="field"><label for="aiLanguage">認識する言語</label><select id="aiLanguage"><option value="auto">自動判定</option><option value="japanese" selected>日本語</option><option value="english">英語</option></select></div>
+        </div>
+        <p id="aiTranscribeHelp" class="muted">AI文字起こしはブラウザ内で実行します。tinyは軽量、baseは中間、smallは精度を優先しますが、モデルが大きいほど初回のダウンロードと処理に時間がかかります。音声は外部の音声認識APIには送信しません。認識結果は誤る場合があります。</p><div id="aiTranscriptResults" class="help-box" style="display:none;white-space:pre-wrap;overflow-wrap:anywhere;margin:8px 0" aria-live="polite"></div><div class="toolbar"><button id="exportSrtBtn" class="secondary" type="button" disabled>字幕をSRTで書き出す</button><button id="copyTranscriptBtn" class="secondary" type="button" disabled>文字起こしをコピー</button></div><p class="muted">補助機能：<strong>素材を解析</strong>は編集案を作るだけ、<strong>音量を自動調整</strong>と<strong>無音をカット</strong>は選択した素材に処理を加えます。迷ったら、まず自動生成だけ試してください。</p>
         <details class="advanced-tools" style="margin-top:14px">
           <summary>細かい編集機能（慣れた方向け）</summary>
           <p class="muted">基本の自動生成だけなら、ここは変更しなくても使えます。素材の並べ替え、拍に合わせた複製・分割などを細かく指定したいときに開いてください。</p>
@@ -2935,19 +2945,20 @@ function detectTransientCandidates(buffer, sensitivity = 5) {
 }
 
 let lastAiPlan = "";
-let speechRecognitionPipelinePromise = null;
+const speechRecognitionPipelines = new Map();
 const speechSegmentsByTrackId = new Map();
 
-// 実際の音声認識モデルを必要なときだけ読み込み、ブラウザ内で文字起こしする。
-async function getSpeechRecognitionPipeline() {
-  if (!speechRecognitionPipelinePromise) {
-    speechRecognitionPipelinePromise = import("https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1")
-      .then(({ pipeline }) => pipeline("automatic-speech-recognition", "Xenova/whisper-tiny"));
+// 選択したモデルだけを必要時に読み込み、モデルごとに再利用する。
+async function getSpeechRecognitionPipeline(modelId) {
+  if (!speechRecognitionPipelines.has(modelId)) {
+    const promise = import("https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1")
+      .then(({ pipeline }) => pipeline("automatic-speech-recognition", modelId));
+    speechRecognitionPipelines.set(modelId, promise);
   }
   try {
-    return await speechRecognitionPipelinePromise;
+    return await speechRecognitionPipelines.get(modelId);
   } catch (error) {
-    speechRecognitionPipelinePromise = null;
+    speechRecognitionPipelines.delete(modelId);
     throw error;
   }
 }
@@ -2993,7 +3004,11 @@ $("aiTranscribeBtn").addEventListener("click", async () => {
   resultsBox.textContent = "音声認識モデルを準備しています。初回はダウンロードに時間がかかる場合があります…";
   setBusy(true);
   try {
-    const recognizer = await getSpeechRecognitionPipeline();
+    const modelId = $("aiModel").value || "Xenova/whisper-tiny";
+    const language = $("aiLanguage").value || "auto";
+    const modelLabel = $("aiModel").selectedOptions[0]?.textContent || "tiny";
+    resultsBox.textContent = modelLabel + "モデルを準備しています。初回はモデルのダウンロードに時間がかかる場合があります…";
+    const recognizer = await getSpeechRecognitionPipeline(modelId);
     const report = [];
     let done = 0;
     for (const track of targets) {
@@ -3002,9 +3017,11 @@ $("aiTranscribeBtn").addEventListener("click", async () => {
       const input = makeMonoAudioInput(track.buffer, start, end);
       if (!input.raw.length) continue;
       status("AI文字起こし中：" + track.name + "（" + (done + 1) + "/" + targets.length + "）");
+      const recognitionOptions = { return_timestamps: true, chunk_length_s: 20, stride_length_s: 4, task: "transcribe" };
+      if (language !== "auto") recognitionOptions.language = language;
       const output = await recognizer(
         { raw: input.raw, sampling_rate: input.sampling_rate },
-        { return_timestamps: true, chunk_length_s: 20, stride_length_s: 4 }
+        recognitionOptions
       );
       const chunks = Array.isArray(output.chunks) ? output.chunks : [];
       const segments = chunks.map(chunk => {
@@ -3028,7 +3045,7 @@ $("aiTranscribeBtn").addEventListener("click", async () => {
       done++;
     }
     resultsBox.textContent = report.join("\n\n");
-    status("AI文字起こしが完了しました。認識したセリフの時間情報は、セリフ中心の自動生成にも利用されます。");
+    status("AI文字起こしが完了しました（" + modelLabel + "・" + (language === "auto" ? "言語自動判定" : language === "japanese" ? "日本語指定" : "英語指定") + "）。認識した時間情報はセリフ中心の自動生成にも利用されます。");
   } catch (error) {
     console.error("AI文字起こしエラー:", error);
     resultsBox.textContent = "AI文字起こしを開始できませんでした。インターネット接続を確認するか、ページを再読み込みして再度お試しください。";
