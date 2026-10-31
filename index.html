@@ -917,6 +917,7 @@ const projectInput = $("projectInput");
 const imageInput = $("imageInput");
 const imageAssets = $("imageAssets");
 const imageAssetUrls = new Map();
+const imageAssetFiles = new Map();
 const trackList = $("trackList");
 const statusBox = $("status");
 const playBtn = $("playBtn");
@@ -1201,45 +1202,49 @@ function createTrack(name, buffer) {
 $("importBtn").addEventListener("click", () => fileInput.click());
 
 $("addImagesBtn").addEventListener("click", () => imageInput.click());
+function addImageAsset(file) {
+  if (!file || !file.type.startsWith("image/") || !file.size) return false;
+  const url = URL.createObjectURL(file);
+  const id = "image-" + makeId() + "-" + imageAssetFiles.size;
+  imageAssetUrls.set(id, url);
+  imageAssetFiles.set(id, file);
+  const card = document.createElement("article");
+  card.className = "image-asset";
+  card.dataset.imageId = id;
+  const img = document.createElement("img");
+  img.src = url;
+  img.alt = file.name;
+  img.loading = "lazy";
+  const name = document.createElement("div");
+  name.className = "image-asset-name";
+  name.textContent = file.name;
+  const remove = document.createElement("button");
+  remove.type = "button";
+  remove.className = "secondary";
+  remove.textContent = "画像を削除";
+  remove.addEventListener("click", () => {
+    URL.revokeObjectURL(url);
+    imageAssetUrls.delete(id);
+    imageAssetFiles.delete(id);
+    card.remove();
+    if (!imageAssets.querySelector(".image-asset")) {
+      imageAssets.replaceChildren();
+      const empty = document.createElement("p");
+      empty.className = "muted";
+      empty.textContent = "画像はまだ追加されていません。";
+      imageAssets.append(empty);
+    }
+  });
+  card.append(img, name, remove);
+  if (!imageAssets.querySelector(".image-asset")) imageAssets.replaceChildren();
+  imageAssets.append(card);
+  return true;
+}
+
 imageInput.addEventListener("change", () => {
   const files = Array.from(imageInput.files || []);
   let added = 0;
-  for (const file of files) {
-    if (!file.type.startsWith("image/") || !file.size) continue;
-    const url = URL.createObjectURL(file);
-    const id = "image-" + makeId() + "-" + added;
-    imageAssetUrls.set(id, url);
-    const card = document.createElement("article");
-    card.className = "image-asset";
-    card.dataset.imageId = id;
-    const img = document.createElement("img");
-    img.src = url;
-    img.alt = file.name;
-    img.loading = "lazy";
-    const name = document.createElement("div");
-    name.className = "image-asset-name";
-    name.textContent = file.name;
-    const remove = document.createElement("button");
-    remove.type = "button";
-    remove.className = "secondary";
-    remove.textContent = "画像を削除";
-    remove.addEventListener("click", () => {
-      URL.revokeObjectURL(url);
-      imageAssetUrls.delete(id);
-      card.remove();
-      if (!imageAssets.querySelector(".image-asset")) {
-        imageAssets.replaceChildren();
-        const empty = document.createElement("p");
-        empty.className = "muted";
-        empty.textContent = "画像はまだ追加されていません。";
-        imageAssets.append(empty);
-      }
-    });
-    card.append(img, name, remove);
-    if (!imageAssets.querySelector(".image-asset")) imageAssets.replaceChildren();
-    imageAssets.append(card);
-    added++;
-  }
+  for (const file of files) if (addImageAsset(file)) added++;
   imageInput.value = "";
   status(added ? added + "枚の画像を参照素材として追加しました。" : "画像を読み込めませんでした。PNG・JPG・WebPなどの画像ファイルを選択してください。");
 });
@@ -3095,20 +3100,47 @@ function projectSettings() {
   };
 }
 
-$("saveProjectBtn").addEventListener("click", () => {
-  const blob = new Blob(
-    [JSON.stringify(projectSettings(), null, 2)],
-    { type: "application/json" }
-  );
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("画像「" + file.name + "」を読み取れませんでした。"));
+    reader.readAsDataURL(file);
+  });
+}
 
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = "otomad-studio-project.json";
-  link.click();
-
-  setTimeout(() => URL.revokeObjectURL(url), 10000);
-  status("プロジェクト設定をJSON形式で保存しました。");
+$("saveProjectBtn").addEventListener("click", async () => {
+  if (busy) return;
+  setBusy(true);
+  try {
+    const project = projectSettings();
+    const imageFiles = Array.from(imageAssetFiles.values());
+    project.imageAssets = [];
+    for (let i = 0; i < imageFiles.length; i++) {
+      status("画像素材をプロジェクトに保存しています… " + (i + 1) + "/" + imageFiles.length);
+      const file = imageFiles[i];
+      project.imageAssets.push({
+        name: file.name,
+        type: file.type,
+        dataUrl: await readFileAsDataUrl(file)
+      });
+    }
+    const blob = new Blob([JSON.stringify(project, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "otomad-studio-project.json";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    status("プロジェクト設定と画像素材" + (imageFiles.length ? "（" + imageFiles.length + "枚）" : "") + "をJSON形式で保存しました。音声本体は含まれません。");
+  } catch (error) {
+    console.error(error);
+    status(error.message || "プロジェクト設定を保存できませんでした。画像の容量を確認してください。");
+  } finally {
+    setBusy(false);
+  }
 });
 
 $("loadProjectBtn").addEventListener("click", () => {
@@ -3135,6 +3167,21 @@ projectInput.addEventListener("change", async () => {
     $("snapDivision").value =
       String([1, 2, 4, 8].includes(Number(project.snapDivision))
         ? project.snapDivision : 1);
+
+    if (Array.isArray(project.imageAssets)) {
+      for (const asset of project.imageAssets) {
+        if (!asset || typeof asset.name !== "string" || typeof asset.dataUrl !== "string") continue;
+        if (!/^data:image\/[a-zA-Z0-9.+-]+;base64,/.test(asset.dataUrl)) continue;
+        try {
+          const response = await fetch(asset.dataUrl);
+          const blob = await response.blob();
+          if (!blob.type.startsWith("image/") || !blob.size) continue;
+          addImageAsset(new File([blob], asset.name, { type: blob.type }));
+        } catch (imageError) {
+          console.warn("画像素材を復元できませんでした:", asset.name, imageError);
+        }
+      }
+    }
 
     let restored = 0;
     // Duplicate filenames are common when importing clips from the same source.
