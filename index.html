@@ -516,6 +516,15 @@ input[type="range"]{accent-color:var(--accent)}
           <div class="toolbar"><button id="clearPromptBtn" class="secondary" type="button">プロンプトを消去</button><button id="applyPromptBtn" class="secondary" type="button">指示を設定に反映</button></div>
         </div>
         <div class="field generation-limit-field">
+          <label for="generationSpeechSplit">文字起こしセリフの分割方法</label>
+          <select id="generationSpeechSplit">
+            <option value="natural">自然なまとまり（おすすめ）</option>
+            <option value="phrase">句読点・フレーズで分割</option>
+            <option value="fine">細かく刻む（文字数から時間を概算）</option>
+          </select>
+          <p class="muted">文字起こしの開始・終了時刻を使います。細かく刻む場合、単語ごとの正確な時刻情報がないため、文字数に応じた概算位置になります。音声を聴いて調整してください。</p>
+        </div>
+        <div class="field generation-limit-field">
           <label for="generationRepeat">セリフ・音の反復</label>
           <select id="generationRepeat">
             <option value="0">反復しない</option>
@@ -3158,7 +3167,7 @@ $("copyTranscriptBtn").addEventListener("click", async () => {
 // プロンプトはブラウザ内で解釈できる設定語に変換する。外部AI APIは使用しない。
 function parseGenerationPrompt(rawPrompt) {
   const prompt = String(rawPrompt || "").trim().toLowerCase();
-  const profile = { goal: null, bpm: null, division: null, density: null, pitchShift: 0, panMode: null, repeatCount: null, notes: [] };
+  const profile = { goal: null, bpm: null, division: null, density: null, pitchShift: 0, panMode: null, repeatCount: null, speechSplit: null, notes: [] };
   if (!prompt) return profile;
   if (/カオス|カオス系|高速|速い|ハイスピード|chaos/.test(prompt)) {
     profile.goal = "chaos"; profile.notes.push("カオス系");
@@ -3190,6 +3199,13 @@ function parseGenerationPrompt(rawPrompt) {
   }
   if (/細かく|高密度|大量|連打|ぎっしり/.test(prompt)) profile.density = "high";
   if (/ゆっくり|余裕|少なめ|間を空け/.test(prompt)) profile.density = "low";
+  if (/細かく刻む|単語ごと|細切れ|細かい刻み/.test(prompt)) {
+    profile.speechSplit = "fine"; profile.notes.push("セリフ細かく分割");
+  } else if (/句読点|フレーズごと|文節ごと/.test(prompt)) {
+    profile.speechSplit = "phrase"; profile.notes.push("フレーズ単位で分割");
+  } else if (/自然なまとまり|セリフを自然に/.test(prompt)) {
+    profile.speechSplit = "natural"; profile.notes.push("自然なセリフ分割");
+  }
   if (/反復しない|繰り返さない|ループなし/.test(prompt)) {
     profile.repeatCount = 0; profile.notes.push("反復なし");
   } else if (/連打|大量(?:に)?(?:反復|ループ)|(?:強く|強めに)(?:反復|繰り返し|ループ)/.test(prompt)) {
@@ -3241,6 +3257,63 @@ document.querySelectorAll(".prompt-preset").forEach(button => {
   });
 });
 
+// 文字起こしの時間区間を、句読点や文字数に応じて分割する補助処理。
+// Whisperの区間時刻からの概算であり、単語単位の強制アラインメントではない。
+function splitTranscriptSegment(segment, mode, source) {
+  const text = String(segment.text || "").trim();
+  const start = clamp(Number(segment.start) || 0, source.startTrim, source.end - 0.03);
+  const end = clamp(Number(segment.end) || start, start + 0.06, source.end);
+  if (mode === "natural" || end - start < 0.24 || text.length < 4) {
+    return [{ time: start, speechEnd: end, transcript: text, strength: 0.75 }];
+  }
+  let parts = [];
+  if (mode === "phrase") {
+    parts = text.split(/(?<=[、。，！？!?；;：:\n])/u).map(part => part.trim()).filter(Boolean);
+  } else {
+    // Japanese text lacks spaces between words; split into short character groups,
+    // keeping punctuation attached to the preceding group.
+    const target = text.length > 16 ? 4 : 3;
+    let current = "";
+    for (const char of Array.from(text)) {
+      current += char;
+      if (/[、。，！？!?；;：]/u.test(char) || Array.from(current).length >= target) {
+        parts.push(current.trim());
+        current = "";
+      }
+    }
+    if (current.trim()) parts.push(current.trim());
+  }
+  parts = parts.filter(Boolean);
+  if (parts.length < 2) {
+    const chars = Array.from(text);
+    if (mode === "fine" && chars.length >= 6) {
+      const midpoint = Math.ceil(chars.length / 2);
+      parts = [chars.slice(0, midpoint).join(""), chars.slice(midpoint).join("")].filter(Boolean);
+    } else {
+      return [{ time: start, speechEnd: end, transcript: text, strength: 0.75 }];
+    }
+  }
+  // Allocate duration proportional to character count so longer phrases receive more time.
+  const weights = parts.map(part => Math.max(1, Array.from(part).length));
+  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+  const duration = end - start;
+  let cursor = start;
+  return parts.map((part, index) => {
+    const pieceStart = cursor;
+    cursor = index === parts.length - 1
+      ? end
+      : cursor + duration * weights[index] / totalWeight;
+    return {
+      time: pieceStart,
+      speechEnd: cursor,
+      transcript: part,
+      strength: 0.75,
+      splitIndex: index,
+      splitCount: parts.length
+    };
+  }).filter(item => item.speechEnd - item.time >= 0.045);
+}
+
 // ローカル自動構成生成：プロンプト設定を拍同期・クリップ配置に反映する。
 $("autoGenerateBtn").addEventListener("click", () => {
   if (busy || !tracks.length) return;
@@ -3269,14 +3342,10 @@ $("autoGenerateBtn").addEventListener("click", () => {
   const eligibleSources = sources.filter(source => source.end - source.startTrim >= 0.08);
   const buckets = eligibleSources.map(source => {
     const transcript = goal === "voice" ? speechSegmentsByTrackId.get(source.id) || [] : [];
+    const requestedSplit = profile.speechSplit || $("generationSpeechSplit").value || "natural";
     const speechCandidates = transcript
       .filter(segment => segment.start < source.end && segment.end > source.startTrim)
-      .map(segment => ({
-        time: clamp(segment.start, source.startTrim, source.end - 0.03),
-        speechEnd: clamp(segment.end, source.startTrim + 0.06, source.end),
-        transcript: segment.text,
-        strength: 0.75
-      }));
+      .flatMap(segment => splitTranscriptSegment(segment, requestedSplit, source));
     const candidates = detectTransientCandidates(source.buffer, sensitivity)
       .filter(item => item.time >= source.startTrim && item.time < source.end - 0.03)
       .sort((a, b) => b.strength - a.strength)
@@ -3304,7 +3373,7 @@ $("autoGenerateBtn").addEventListener("click", () => {
       const peakLevel = clamp((candidate.strength || 0) / maxStrength, 0.35, 1);
       const start = clamp(candidate.time, source.startTrim, Math.max(source.startTrim, source.end - 0.04));
       const desiredLength = candidate.speechEnd
-        ? clamp(candidate.speechEnd - start, 0.18, 4)
+        ? clamp(candidate.speechEnd - start, 0.055, 4)
         : goal === "voice"
           ? beat * 0.62
           : goal === "music"
@@ -3396,7 +3465,7 @@ $("autoGenerateBtn").addEventListener("click", () => {
   status("プロンプト生成：" + generated.length + "クリップ（上限 " + maxClips + "、反復 " + repeatedCount + "個）、BPM " + bpm +
     "、配置間隔 " + interval.toFixed(3) + "秒" +
     (profile.notes.length ? "。反映：" + profile.notes.join("、") : "。方向性：" + $("aiGoal").selectedOptions[0].textContent) +
-    "。"+ (goal === "voice" && buckets.some(bucket => bucket.usedTranscript) ? "AI文字起こしの時間情報を使ってセリフを配置しました。" : "") + "元素材はミュートして保持しています。再生して確認し、Ctrl+Zで全体を取り消せます。");
+    "。"+ (goal === "voice" && buckets.some(bucket => bucket.usedTranscript) ? "文字起こしの時間情報を使ってセリフを配置しました（分割：" + (profile.speechSplit || $("generationSpeechSplit").value || "natural") + "）。" : "") + "元素材はミュートして保持しています。再生して確認し、Ctrl+Zで全体を取り消せます。");
 });
 
 $("trimSilenceBtn").addEventListener("click", () => {
