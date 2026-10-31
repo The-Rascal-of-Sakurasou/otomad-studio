@@ -1872,8 +1872,8 @@ async function loadAudioFiles(fileList) {
   let success = 0;
   let failed = 0;
   const results = new Array(files.length);
-  const isVideoFile = file => /^video\\//i.test(file.type) ||
-    /\\.(mp4|mov|webm|m4v|mkv|avi)$/i.test(file.name);
+  const isVideoFile = file => /^video\//i.test(file.type) ||
+    /\.(mp4|mov|webm|m4v|mkv|avi)$/i.test(file.name);
   const formatSize = bytes => bytes >= 1024 * 1024
     ? (bytes / 1024 / 1024).toFixed(1) + " MB"
     : Math.max(1, Math.round(bytes / 1024)) + " KB";
