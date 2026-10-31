@@ -10,6 +10,7 @@ OtoMAD Studio is a Japanese-first, browser-based editor for 音MAD workflows. It
 - Audio extraction from supported video files where the browser can decode the file.
 - Waveform display, track positioning, trimming, pitch, volume, pan, mute/solo, fades, and track effects.
 - Timeline editing, beat-grid snapping, transient-based alignment, BPM estimation, and timing nudges.
+- AI speech transcription with selectable Whisper models, language options, timestamped segments, and sequential processing of tracks longer than three minutes. Model download progress is shown; model files are fetched from a CDN and inference runs in the browser.
 - Local audio metrics, quiet-region/transient candidates, and rule-based editing suggestions.
 - Image assets can be imported as visual reference material. They are not yet composited into a video export.
 - Save and reload project settings as JSON. The JSON stores editing settings, not the source media.
@@ -21,7 +22,7 @@ OtoMAD Studio is a Japanese-first, browser-based editor for 音MAD workflows. It
 
 ## Important limitations
 
-- The current analysis and editing suggestions are based on local signal measurements and rules. They should not be described as generative-AI understanding of the audio.
+- AI speech transcription uses a speech-recognition model; other analysis and editing suggestions are based on local signal measurements and rules, not generative-AI understanding of the audio.
 - Image assets are reference-only; full video timeline compositing and video export are not implemented yet.
 - Video import depends on the browser's media decoder and currently supports audio extraction for the audio workflow.
 - Project JSON does not include audio or video files. Reload the source media separately before restoring project settings.
@@ -56,7 +57,7 @@ You are responsible for confirming that you have the rights or permission to use
 OtoMAD Studioは、音MAD制作を支援するブラウザ型の音声編集ツールです。複数トラックの編集、タイムライン操作、BPM推定、拍合わせ、素材の簡易解析、WAV書き出しなどを備えています。
 
 **現在の注意点**
-- 素材解析と編集案は、音量などの信号情報に基づくルールベースの機能です。音声の意味を理解する生成AI機能とは異なります。
+- AI文字起こしはWhisper系モデルを利用し、タイムスタンプ付きのセリフ候補を抽出します。その他の素材解析と編集案は、音量などの信号情報に基づくルールベースの機能です。
 - 画像は参照素材として読み込めますが、動画への合成や動画ファイルの書き出しには未対応です。
 - 書き出し形式はWAVのみです。
 - プロジェクト設定JSONには素材本体が含まれないため、再読み込み時には元の素材ファイルも必要です。
