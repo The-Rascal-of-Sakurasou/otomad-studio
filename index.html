@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#101014">
+<meta name="theme-color" content="#f4f6fb">
 <meta name="description" content="OtoMAD Studio - 音MAD制作向けマルチトラック音声編集ツール">
 <title>OtoMAD Studio</title>
 <style>
@@ -254,6 +254,36 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 @media(prefers-reduced-motion:reduce){
   html{scroll-behavior:auto}
   *,*::before,*::after{transition:none!important;animation:none!important}
+}
+
+/* Follow-up polish: status visibility and light-theme consistency */
+.status{
+  margin-top:12px;
+  padding:10px 12px;
+  min-height:44px;
+  display:flex;
+  align-items:center;
+  background:#f7f8fc;
+  border:1px solid #dce2ef;
+  border-left:4px solid #818cf8;
+  border-radius:9px;
+  color:#46516d;
+}
+.file-drop-active{
+  outline-color:#4f46e5;
+  background:#eef2ff!important;
+}
+.file-drop-active::after{color:#3730a3}
+textarea{
+  background:#fff;
+  color:var(--text);
+  border-color:#cbd3e3;
+}
+#trackList .track{background:#fbfcff}
+#trackList .track.is-selected{background:#f0f2ff}
+input[type="range"]{accent-color:var(--accent)}
+@media(max-width:600px){
+  .status{padding:9px 10px;font-size:12px}
 }
 </style>
 </head>
