@@ -548,6 +548,13 @@ footer{color:#7a8498}
   *,*::before,*::after{scroll-behavior:auto!important;transition:none!important}
 }
 
+/* Performance and motion: avoid expensive work while the user is resizing the window */
+.wave{contain:content}
+.track{content-visibility:auto;contain-intrinsic-size:auto 220px}
+@media(prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+}
+
 /* Workflow simplification: keep the four common actions visible and group secondary actions */
 #projectPanel>.toolbar{
   display:grid;
@@ -1057,6 +1064,9 @@ const imageInput = $("imageInput");
 const imageAssets = $("imageAssets");
 const imageAssetUrls = new Map();
 const imageAssetFiles = new Map();
+// Cache waveform peak data per decoded buffer and display width so rerendering
+// tracks does not rescan every audio sample.
+const waveformPeakCache = new WeakMap();
 const trackList = $("trackList");
 const statusBox = $("status");
 const playBtn = $("playBtn");
@@ -1686,26 +1696,37 @@ function drawWaveform(canvas, track) {
   ctx.stroke();
 
   const data = track.buffer.getChannelData(0);
-  const samplesPerPixel = Math.max(1, Math.floor(data.length / width));
+  let peaksByWidth = waveformPeakCache.get(track.buffer);
+  if (!peaksByWidth) {
+    peaksByWidth = new Map();
+    waveformPeakCache.set(track.buffer, peaksByWidth);
+  }
+  let peaks = peaksByWidth.get(width);
+  if (!peaks) {
+    peaks = new Float32Array(width);
+    for (let x = 0; x < width; x++) {
+      const start = Math.floor(x * data.length / width);
+      const end = Math.max(start + 1, Math.floor((x + 1) * data.length / width));
+      let peak = 0;
+      for (let j = start; j < end && j < data.length; j++) {
+        const sample = Math.abs(data[j]);
+        if (sample > peak) peak = sample;
+      }
+      peaks[x] = peak;
+    }
+    // Keep only a few display sizes per buffer to bound memory use.
+    if (peaksByWidth.size >= 3) peaksByWidth.delete(peaksByWidth.keys().next().value);
+    peaksByWidth.set(width, peaks);
+  }
 
   ctx.strokeStyle = "#c4b5fd";
   ctx.lineWidth = 1;
   ctx.beginPath();
-
   for (let x = 0; x < width; x++) {
-    const index = x * samplesPerPixel;
-    if (index >= data.length) break;
-
-    let peak = 0;
-    for (let j = 0; j < samplesPerPixel && index + j < data.length; j++) {
-      peak = Math.max(peak, Math.abs(data[index + j]));
-    }
-
-    const h = peak * (height * 0.43);
+    const h = peaks[x] * (height * 0.43);
     ctx.moveTo(x, height / 2 - h);
     ctx.lineTo(x, height / 2 + h);
   }
-
   ctx.stroke();
 
   ctx.strokeStyle = "#f0abfc";
@@ -3609,10 +3630,14 @@ $("clearBtn").addEventListener("click", () => {
   status("すべてのトラックを削除しました。");
 });
 
+let resizeRenderTimer = 0;
 window.addEventListener("resize", () => {
-  drawTimeline();
-  renderTracks();
-});
+  window.clearTimeout(resizeRenderTimer);
+  resizeRenderTimer = window.setTimeout(() => {
+    drawTimeline();
+    renderTracks();
+  }, 120);
+}, { passive: true });
 
 window.addEventListener("beforeunload", () => {
   if (audioContext && audioContext.state !== "closed") {
