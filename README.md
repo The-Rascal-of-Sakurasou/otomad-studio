@@ -15,6 +15,7 @@ OtoMAD Studio is a Japanese-first, browser-based editor for 音MAD workflows. It
 - Image assets can be imported as visual reference material. They are not yet composited into a video export.
 - Save and reload project settings as JSON. The JSON stores editing settings, not the source media.
 - Export the mix as stereo 16-bit PCM WAV at 44.1 kHz or 48 kHz.
+- Optional compressed audio export using a browser-supported MediaRecorder codec (typically WebM/Opus; other supported containers may be selected by the browser). This records in real time and can take about as long as the mix duration.
 - Optional peak reduction to -1 dBFS during export.
 - Chunked WAV encoding and peak processing with progress feedback to help keep the interface responsive.
 - Undo/redo for supported editing operations.
@@ -26,7 +27,7 @@ OtoMAD Studio is a Japanese-first, browser-based editor for 音MAD workflows. It
 - Image assets are reference-only; full video timeline compositing and video export are not implemented yet.
 - Video import depends on the browser's media decoder and currently supports audio extraction for the audio workflow.
 - Project JSON does not include audio or video files. Reload the source media separately before restoring project settings.
-- Export is WAV-only. MP3 and video export are not currently available.
+- WAV is the lossless-oriented export option. Compressed audio export depends on browser MediaRecorder codec support and runs in real time; MP3 and video export are not currently available.
 - Processing runs in the browser; long or complex projects can still require substantial memory. The current renderer limits the mix to five minutes.
 
 ## Getting started
@@ -59,7 +60,7 @@ OtoMAD Studioは、音MAD制作を支援するブラウザ型の音声編集ツ�
 **現在の注意点**
 - AI文字起こしはWhisper系モデルを利用し、タイムスタンプ付きのセリフ候補を抽出します。その他の素材解析と編集案は、音量などの信号情報に基づくルールベースの機能です。
 - 画像は参照素材として読み込めますが、動画への合成や動画ファイルの書き出しには未対応です。
-- 書き出し形式はWAVのみです。
+- WAV書き出しに加え、対応ブラウザではWebM/Opusなどの圧縮音声書き出しも利用できます。圧縮音声はリアルタイム録音方式のため、ミックスの再生時間と同程度の時間がかかる場合があります。MP3と動画の書き出しは未対応です。
 - プロジェクト設定JSONには素材本体が含まれないため、再読み込み時には元の素材ファイルも必要です。
 - 長いプロジェクトはメモリを多く使用する可能性があります。現行のミックス処理は5分以内に制限されています。
 
