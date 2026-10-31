@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#f4f6fb">
-<meta name="description" content="OtoMAD Studio - 音MAD制作向けマルチトラック音声編集ツール">
-<title>OtoMAD Studio</title>
+<meta name="description" content="OtoMAD Studioは、日本語で使える音MAD制作・音声編集ツールです。音声・動画・画像素材の読み込み、タイムライン編集、リズム調整、書き出しに対応します。">
+<title>OtoMAD Studio｜日本語で使える音MAD制作・音声編集ツール</title>
 <style>
 :root{
   color-scheme:dark;
@@ -359,6 +359,43 @@ footer{padding:22px 12px}
 }
 @media(prefers-reduced-motion:reduce){.step-guide a{transition:none}}
 
+
+/* 日本国内の利用者を主対象にした、日本語優先の操作性 */
+:root{--jp-accent:#5145d9;--jp-accent-soft:#f0efff;--jp-line:#dce2ef}
+html{font-feature-settings:"palt";text-size-adjust:100%;-webkit-text-size-adjust:100%}
+body{font-family:"BIZ UDPGothic","Noto Sans JP","Hiragino Kaku Gothic ProN","Yu Gothic UI","Yu Gothic",Meiryo,system-ui,sans-serif;line-break:strict;overflow-wrap:anywhere}
+button,input,select,textarea{font-family:inherit}
+::selection{background:#dcd9ff;color:#211c62}
+.brand{letter-spacing:0}
+.subtitle{letter-spacing:.015em}
+h2,h3,button,label,summary{line-break:strict}
+.panel h2{line-height:1.5}
+.section-intro,.muted,.help-box{line-height:1.85}
+.quick-nav a{font-size:13px;letter-spacing:.01em}
+button{line-height:1.55;word-break:keep-all}
+input,select,textarea{font-size:14px}
+input[type=number],select{min-height:42px}
+textarea{min-height:90px}
+.step-guide a{line-height:1.75}
+.step-guide a strong{line-height:1.5}
+.badge{font-size:11px;line-height:1.5}
+.stat{font-size:12px;line-height:1.55}
+.status{line-height:1.75;overflow-wrap:anywhere}
+.field label{line-height:1.6}
+.track-name{line-height:1.6}
+details>summary{line-height:1.7}
+#projectPanel .toolbar button:first-child,#projectPanel .toolbar #playBtn,#projectPanel .toolbar #exportBtn{min-height:42px}
+#projectPanel .toolbar button:first-child{background:#3730a3}
+#projectPanel .toolbar #exportBtn{background:#087f68;color:#fff}
+#projectPanel .toolbar #exportBtn:hover{background:#066854}
+.help-box{border-radius:0 10px 10px 0}
+.primary-action-box,.advanced-tools,.generation-limit-field{line-height:1.8}
+a{overflow-wrap:anywhere}
+@media(max-width:600px){
+ body{font-size:14px}.quick-nav a{font-size:13px}.panel h2{align-items:flex-start}
+ .toolbar button{min-height:44px}input[type=number],select{min-height:44px}
+ .field label{font-size:13px}.muted,.section-intro{font-size:13px}
+}
 </style>
 </head>
 <body>
