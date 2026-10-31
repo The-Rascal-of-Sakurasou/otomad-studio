@@ -1640,15 +1640,25 @@ videoSourceInput.addEventListener("change", () => {
 videoImageSelect.addEventListener("change", drawVideoPreview);
 videoOverlayText.addEventListener("input", drawVideoPreview);
 
+function setVideoComposerLocked(locked) {
+  videoSourceInput.disabled = locked;
+  videoImageSelect.disabled = locked;
+  videoOverlayText.disabled = locked;
+  $("addImagesBtn").disabled = locked;
+  $("clearImagesBtn").disabled = locked || imageAssetFiles.size === 0;
+  imageAssets.querySelectorAll("button").forEach(button => { button.disabled = locked; });
+}
+
 function updateVideoExportAvailability() {
   const supported = !!(window.MediaRecorder && videoPreviewCanvas.captureStream &&
+    typeof MediaRecorder.isTypeSupported === "function" &&
     (MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus") ||
      MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus") ||
      MediaRecorder.isTypeSupported("video/webm")));
   exportVideoBtn.disabled = videoExporting || !tracks.length || !supported;
   if (!supported) videoExportProgress.textContent = "このブラウザはWebM動画の書き出しに対応していません。";
   else if (!tracks.length && !videoExporting) videoExportProgress.textContent = "音声素材を読み込むと書き出せます。";
-  refreshVideoImageOptions();
+  if (!videoExporting) refreshVideoImageOptions();
 }
 
 exportVideoBtn.addEventListener("click", async () => {
@@ -1664,6 +1674,7 @@ exportVideoBtn.addEventListener("click", async () => {
   }
   videoExporting = true;
   exportVideoBtn.disabled = true;
+  setVideoComposerLocked(true);
   let audioContext = null, audioSource = null, recorder = null, frameId = 0;
   let stopped = false;
   const streams = [];
@@ -1742,6 +1753,7 @@ exportVideoBtn.addEventListener("click", async () => {
     for (const stream of streams) for (const track of stream.getTracks()) track.stop();
     if (audioContext) await audioContext.close().catch(() => {});
     videoExporting = false;
+    setVideoComposerLocked(false);
     updateVideoExportAvailability();
   }
 });
