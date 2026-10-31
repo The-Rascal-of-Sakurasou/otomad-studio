@@ -548,6 +548,104 @@ footer{color:#7a8498}
   *,*::before,*::after{scroll-behavior:auto!important;transition:none!important}
 }
 
+
+/* Readability pass: stronger contrast, calmer spacing, clearer controls */
+:root{
+  --bg:#f1f4f9;
+  --panel:#ffffff;
+  --panel2:#f6f8fc;
+  --border:#d2d9e6;
+  --accent:#4338ca;
+  --text:#182238;
+  --muted:#4b5870;
+}
+html{scroll-padding-top:76px}
+body{font-size:15px;line-height:1.75;color:#182238}
+header{padding-top:22px;padding-bottom:20px}
+.brand{font-size:clamp(23px,2.4vw,30px);line-height:1.35}
+.subtitle{margin-top:6px;color:#4b5870;font-size:14px;line-height:1.8}
+.quick-nav{min-height:56px}
+.quick-nav a{font-size:13px;min-height:42px;color:#35415b}
+main{padding-top:22px}
+.panel{
+  padding:22px;
+  margin-bottom:18px;
+  border-color:#d6ddea;
+  border-radius:14px;
+  box-shadow:0 3px 12px rgba(24,34,56,.045);
+}
+.panel h2{font-size:18px;line-height:1.55;margin-bottom:15px;color:#17213a}
+.panel h3{font-size:15px;line-height:1.6;color:#202b44}
+p{line-height:1.85}
+.muted,.section-intro{color:#4b5870;font-size:14px;line-height:1.9}
+.section-intro{font-size:15px}
+.help-box{padding:13px 15px;color:#3f4b65;background:#f3f5ff;border-left:4px solid #6258d8;line-height:1.9}
+.badge{font-size:12px;font-weight:700;padding:4px 8px}
+.step-guide a{min-height:104px;padding:15px;font-size:14px;line-height:1.8;color:#4b5870}
+.step-guide a strong{font-size:14px;color:#202944}
+button{
+  min-height:42px;padding:9px 14px;
+  font-size:14px;line-height:1.55;font-weight:600;
+  border-radius:8px;
+}
+button:disabled{opacity:.48}
+input,select,textarea{font-size:15px;line-height:1.6;color:#1b263d}
+input[type=text],input[type=number],select,textarea{
+  border:1px solid #bdc7d9;border-radius:8px;
+  background:#fff;min-height:42px;padding:8px 10px;
+}
+input[type=checkbox],input[type=radio]{width:17px;height:17px;accent-color:#4338ca;flex:none}
+.field{gap:7px}
+.field label,.controls .field label,.effects .field label{
+  display:block;font-size:14px;font-weight:700;line-height:1.7;color:#35415a;
+}
+.field .muted{margin-top:4px}
+#projectPanel .toolbar{padding:14px;gap:9px}
+#projectPanel .toolbar button{min-height:44px}
+#status{min-height:52px;padding:12px 14px;font-size:14px;line-height:1.8}
+.timeline-box{padding:14px}
+.timeline-tools{gap:9px}
+.timeline-tools button{min-width:92px}
+#trackList .track{padding:16px;border-color:#d6ddea}
+.track-name{font-size:15px;font-weight:750;line-height:1.7}
+.wave-help,.stat{font-size:13px;line-height:1.75;color:#4b5870}
+.controls .field,.effects .field,.bulk-controls .field{
+  padding:12px;background:#f7f9fc;border-color:#e0e6f0;
+}
+#masterPanel,#bpmPanel,#assistantPanel{border-top-width:4px}
+#masterPanel .muted,#bpmPanel .muted,#assistantPanel .muted{font-size:13px}
+details{line-height:1.9}
+details>summary{padding:7px 0;font-size:14px}
+.quick-start{line-height:2}
+.status:before{font-size:11px}
+a{color:#3730a3}
+a:hover{color:#312e81}
+::placeholder{color:#7a8498;opacity:1}
+:focus-visible{outline-color:#4338ca!important}
+@media(max-width:800px){
+  .panel{padding:18px;margin-bottom:14px}
+  .step-guide a{min-height:90px}
+  .layout{gap:12px}
+}
+@media(max-width:600px){
+  body{font-size:15px}
+  main{padding:12px 10px 28px}
+  .panel{padding:15px;margin-bottom:12px}
+  .panel h2{font-size:17px}
+  .subtitle{font-size:13px}
+  .muted,.section-intro{font-size:13px;line-height:1.85}
+  .section-intro{font-size:14px}
+  .help-box{padding:11px 12px}
+  .step-guide a{font-size:13px;padding:12px;min-height:0}
+  .step-guide a strong{font-size:14px}
+  button{font-size:13px;padding:9px 10px}
+  input,select,textarea{font-size:16px}
+  .field label,.controls .field label,.effects .field label{font-size:13px}
+  #trackList .track{padding:12px}
+  #projectPanel .toolbar{padding:10px}
+  .quick-nav{min-height:50px}
+}
+
 </style>
 </head>
 <body>
