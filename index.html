@@ -755,6 +755,7 @@ a:hover{color:#312e81}
       <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px">
         <div class="field"><label for="videoSourceInput">背景動画（任意）</label><input id="videoSourceInput" type="file" accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov,.m4v"></div>
         <div class="field"><label for="videoImageSelect">背景画像（動画がない場合）</label><select id="videoImageSelect"><option value="">単色背景</option></select></div>
+        <div class="field"><label for="videoFitMode">映像の表示方法</label><select id="videoFitMode"><option value="cover">画面いっぱい（端を切り取る）</option><option value="contain">全体を表示（余白あり）</option></select></div>
         <div class="field"><label for="videoOverlayText">画面に重ねる文字</label><input id="videoOverlayText" type="text" maxlength="120" placeholder="例：作品名・セリフ"></div>
       </div>
       <div class="timeline-box" style="margin-top:10px"><canvas id="videoPreviewCanvas" width="960" height="540" style="display:block;width:100%;height:auto;aspect-ratio:16/9;background:#09090b" aria-label="動画合成プレビュー"></canvas></div>
@@ -1523,6 +1524,7 @@ imageInput.addEventListener("change", () => {
 const videoSourceInput = $("videoSourceInput");
 const videoImageSelect = $("videoImageSelect");
 const videoOverlayText = $("videoOverlayText");
+const videoFitMode = $("videoFitMode");
 const videoPreviewCanvas = $("videoPreviewCanvas");
 const videoPreviewCtx = videoPreviewCanvas.getContext("2d");
 const exportVideoBtn = $("exportVideoBtn");
@@ -1568,7 +1570,9 @@ function drawVideoPreview() {
   if (source) {
     const sw = source.videoWidth || source.naturalWidth;
     const sh = source.videoHeight || source.naturalHeight;
-    const scale = Math.max(width / sw, height / sh);
+    const scale = videoFitMode.value === "contain"
+      ? Math.min(width / sw, height / sh)
+      : Math.max(width / sw, height / sh);
     const dw = sw * scale, dh = sh * scale;
     ctx.drawImage(source, (width - dw) / 2, (height - dh) / 2, dw, dh);
   }
@@ -1624,11 +1628,13 @@ videoSourceInput.addEventListener("change", () => {
   drawVideoPreview();
 });
 videoImageSelect.addEventListener("change", drawVideoPreview);
+videoFitMode.addEventListener("change", drawVideoPreview);
 videoOverlayText.addEventListener("input", drawVideoPreview);
 
 function setVideoComposerLocked(locked) {
   videoSourceInput.disabled = locked;
   videoImageSelect.disabled = locked;
+  videoFitMode.disabled = locked;
   videoOverlayText.disabled = locked;
   $("addImagesBtn").disabled = locked;
   $("clearImagesBtn").disabled = locked || imageAssetFiles.size === 0;
@@ -1669,6 +1675,30 @@ exportVideoBtn.addEventListener("click", async () => {
     status("音声ミックスを準備しています。動画書き出し中はタブを前面に保ってください。");
     videoExportProgress.textContent = "音声をレンダリングしています…";
     const mix = await renderMix();
+    if (videoSourceElement && Number.isFinite(videoSourceElement.duration) && videoSourceElement.duration > 0) {
+      videoSourceElement.pause();
+      if (videoSourceElement.currentTime !== 0) {
+        await new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            cleanup();
+            reject(new Error("背景動画を先頭位置に戻せませんでした。"));
+          }, 5000);
+          const cleanup = () => {
+            clearTimeout(timeout);
+            videoSourceElement.removeEventListener("seeked", onSeeked);
+            videoSourceElement.removeEventListener("error", onError);
+          };
+          const onSeeked = () => { cleanup(); resolve(); };
+          const onError = () => { cleanup(); reject(new Error("背景動画をシークできませんでした。")); };
+          videoSourceElement.addEventListener("seeked", onSeeked, { once: true });
+          videoSourceElement.addEventListener("error", onError, { once: true });
+          videoSourceElement.currentTime = 0;
+        });
+      }
+      await videoSourceElement.play();
+    }
+    drawVideoPreview();
+    await new Promise(resolve => requestAnimationFrame(() => resolve()));
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextClass) throw new Error("このブラウザは音声合成に対応していません。");
     audioContext = new AudioContextClass({ sampleRate: mix.sampleRate });
