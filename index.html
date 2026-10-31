@@ -3031,10 +3031,14 @@ const speechRecognitionPipelines = new Map();
 const speechSegmentsByTrackId = new Map();
 
 // 選択したモデルだけを必要時に読み込み、モデルごとに再利用する。
-async function getSpeechRecognitionPipeline(modelId) {
+async function getSpeechRecognitionPipeline(modelId, onProgress = () => {}) {
   if (!speechRecognitionPipelines.has(modelId)) {
     const promise = import("https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1")
-      .then(({ pipeline }) => pipeline("automatic-speech-recognition", modelId));
+      .then(({ pipeline }) => pipeline("automatic-speech-recognition", modelId, {
+        progress_callback: progress => {
+          try { onProgress(progress); } catch (_) {}
+        }
+      }));
     speechRecognitionPipelines.set(modelId, promise);
   }
   try {
@@ -3090,7 +3094,23 @@ $("aiTranscribeBtn").addEventListener("click", async () => {
     const language = $("aiLanguage").value || "auto";
     const modelLabel = $("aiModel").selectedOptions[0]?.textContent || "tiny";
     resultsBox.textContent = modelLabel + "モデルを準備しています。初回はモデルのダウンロードに時間がかかる場合があります…";
-    const recognizer = await getSpeechRecognitionPipeline(modelId);
+    const recognizer = await getSpeechRecognitionPipeline(modelId, progress => {
+      const file = progress && progress.file ? String(progress.file).split("/").pop() : "モデル";
+      const loaded = Number(progress && progress.loaded);
+      const total = Number(progress && progress.total);
+      const percent = Number.isFinite(loaded) && Number.isFinite(total) && total > 0
+        ? " " + Math.min(100, Math.round(loaded / total * 100)) + "%"
+        : "";
+      if (progress && progress.status === "progress") {
+        const message = "AIモデルをダウンロード中：" + file + percent;
+        resultsBox.textContent = message;
+        status(message);
+      } else if (progress && progress.status === "done") {
+        const message = "AIモデルを準備中：" + file;
+        resultsBox.textContent = message;
+        status(message);
+      }
+    });
     const report = [];
     let done = 0;
     for (const track of targets) {
