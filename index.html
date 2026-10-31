@@ -903,7 +903,7 @@ a:hover{color:#312e81}
           <h3>まずはこの3つを使えばOK</h3>
           <ol class="quick-start"><li>音声を追加したあと、作りたい方向性を選びます。</li><li>下の欄に希望を書き、「プロンプトで音MADを生成」を押します。</li><li>「再生して確認」で聴き、気に入らなければCtrl+Zで戻します。</li></ol>
         </div>
-                <div class="toolbar"><button id="autoGenerateBtn" class="green" disabled>プロンプトで音MADを生成</button><button id="aiTranscribeBtn" class="secondary" disabled>AIでセリフを文字起こし</button><button id="analyzeBtn" class="secondary" disabled>素材を解析して編集案を作成</button><button id="copyPlanBtn" class="secondary" disabled>編集案をコピー</button><button id="exportAnalysisBtn" class="secondary" disabled>解析データをJSON保存</button><button id="autoGainBtn" class="secondary" disabled>選択素材の音量を自動調整</button><button id="trimSilenceBtn" class="secondary" disabled>選択素材の前後の無音をカット</button><button id="prepareSelectedBtn" class="primary" disabled>選択素材をまとめて整える</button></div>
+                <div class="toolbar"><button id="autoGenerateBtn" class="green" disabled>プロンプトで音MADを生成</button><button id="compareGenerationBtn" class="secondary" type="button" disabled>原音と生成結果を比較</button><button id="aiTranscribeBtn" class="secondary" disabled>AIでセリフを文字起こし</button><button id="analyzeBtn" class="secondary" disabled>素材を解析して編集案を作成</button><button id="copyPlanBtn" class="secondary" disabled>編集案をコピー</button><button id="exportAnalysisBtn" class="secondary" disabled>解析データをJSON保存</button><button id="autoGainBtn" class="secondary" disabled>選択素材の音量を自動調整</button><button id="trimSilenceBtn" class="secondary" disabled>選択素材の前後の無音をカット</button><button id="prepareSelectedBtn" class="primary" disabled>選択素材をまとめて整える</button></div>
         <div class="ai-options" aria-label="AI文字起こし設定">
           <div class="field"><label for="aiModel">音声認識モデル</label><select id="aiModel"><option value="Xenova/whisper-tiny">軽量・高速（tiny）</option><option value="Xenova/whisper-base">標準（base）</option><option value="Xenova/whisper-small">高精度優先（small）</option></select></div>
           <div class="field"><label for="aiLanguage">認識する言語</label><select id="aiLanguage"><option value="auto">自動判定</option><option value="japanese" selected>日本語</option><option value="english">英語</option></select></div>
@@ -1027,6 +1027,7 @@ const masterVolume = $("masterVolume");
 let audioContext = null;
 let tracks = [];
 let nextId = 1;
+let lastGenerationAB = null;
 let busy = false;
 let playbackSources = [];
 let playbackToken = 0;
@@ -4182,6 +4183,9 @@ $("autoGenerateBtn").addEventListener("click", () => {
   tracks.forEach(track => { track.solo = false; });
   sources.forEach(source => { source.muted = true; });
   tracks.push(...generated);
+  lastGenerationAB = { sourceIds: sources.map(source => source.id), generatedIds: generated.map(track => track.id), mode: "generated" };
+  $("compareGenerationBtn").disabled = false;
+  $("compareGenerationBtn").textContent = "生成結果を再生中（クリックで原音）";
   selectedTrackIds.clear();
   generated.forEach(track => selectedTrackIds.add(track.id));
   seekOffset = 0;
@@ -4196,6 +4200,37 @@ $("autoGenerateBtn").addEventListener("click", () => {
       ? "文字起こしの時間情報を使ってセリフを配置しました（分割：" + (profile.speechSplit || $("generationSpeechSplit").value || "natural") + "）。"
       : goal === "voice" ? "文字起こし結果がないため、音の立ち上がりを代用しています。セリフ中心にする場合は先にAI文字起こしを実行してください。" : "") +
     "元素材はミュートして保持しています。再生して確認し、Ctrl+Zで全体を取り消せます。");
+});
+
+$("compareGenerationBtn").addEventListener("click", () => {
+  if (busy || !lastGenerationAB) return;
+  const sourceIds = new Set(lastGenerationAB.sourceIds);
+  const generatedIds = new Set(lastGenerationAB.generatedIds);
+  const existingSourceIds = new Set(tracks.filter(track => sourceIds.has(track.id)).map(track => track.id));
+  const existingGeneratedIds = new Set(tracks.filter(track => generatedIds.has(track.id)).map(track => track.id));
+  if (!existingSourceIds.size || !existingGeneratedIds.size) {
+    $("compareGenerationBtn").disabled = true;
+    status("比較対象のトラックが見つかりません。");
+    return;
+  }
+  recordHistory();
+  stopPlayback();
+  const showOriginal = lastGenerationAB.mode === "generated";
+  tracks.forEach(track => {
+    if (sourceIds.has(track.id)) track.muted = !showOriginal;
+    if (generatedIds.has(track.id)) track.muted = showOriginal;
+    track.solo = false;
+  });
+  lastGenerationAB.mode = showOriginal ? "original" : "generated";
+  $("compareGenerationBtn").textContent = showOriginal
+    ? "原音を再生中（クリックで生成結果）"
+    : "生成結果を再生中（クリックで原音）";
+  renderTracks();
+  drawTimeline();
+  updateButtons();
+  status(showOriginal
+    ? "原音を再生する状態に切り替えました。もう一度押すと生成結果に戻ります。"
+    : "生成結果を再生する状態に切り替えました。もう一度押すと原音に戻ります。");
 });
 
 $("trimSilenceBtn").addEventListener("click", () => {
