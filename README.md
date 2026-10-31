@@ -2,50 +2,47 @@
 
 **Create. Remix. Make It MAD.**
 
-OtoMAD Studio is a Japanese-first, browser-based editor for 音MAD workflows. It is built with HTML, CSS, JavaScript, and the Web Audio API, and is hosted with GitHub Pages.
+OtoMAD Studio is a Japanese-first, browser-based audio editor for 音MAD workflows. It is built with HTML, CSS, JavaScript, and the Web Audio API, and is hosted on GitHub Pages.
 
-## Current features
+## Features
 
-- Multi-track audio import and mix preview.
-- Audio extraction from supported video files where the browser can decode the file.
-- Waveform display, track positioning, trimming, pitch, volume, pan, mute/solo, fades, and track effects.
+- Multi-track audio import, waveform display, mix preview, positioning, trimming, pitch, volume, pan, mute/solo, fades, and track effects.
+- Audio extraction from video files supported by the browser's media decoder.
 - Timeline editing, beat-grid snapping, transient-based alignment, BPM estimation, and timing nudges.
-- AI speech transcription with selectable Whisper models, language options, timestamped segments, and sequential processing of tracks longer than three minutes. Model download progress is shown; model files are fetched from a CDN and inference runs in the browser.
+- In-browser speech transcription using selectable Whisper models, language options, timestamped segments, and sequential processing of long tracks. Model download progress is shown.
 - Local audio metrics, quiet-region/transient candidates, and rule-based editing suggestions.
-- Image assets can be imported and used as backgrounds in a simple canvas-based video composition preview.
-- Basic WebM
-- 文字オーバーレイの表示開始・終了秒を指定可能（終了 `0` は最後まで表示）。
-- 背景動画の開始・終了位置を秒単位で指定可能。終了位置 `0`、または開始位置以下の値は動画の最後まで使用します。書き出し中は指定範囲を繰り返します。 video export combines the current audio mix with an optional looping video background or imported image and a single-line text overlay. Video can be cropped to fill the frame or contained with letterboxing. Export is real-time, browser-dependent, and limited by the five-minute audio renderer.
-- Save and reload project settings as JSON. Imported image assets are embedded in the JSON; source audio and video files are not embedded and must be re-imported separately.
-- Export the mix as stereo 16-bit PCM WAV at 44.1 kHz or 48 kHz.
-- Optional compressed audio export using a browser-supported MediaRecorder codec (typically WebM/Opus; other supported containers may be selected by the browser). This records in real time and can take about as long as the mix duration.
-- Optional peak reduction to -1 dBFS during export.
-- Chunked WAV encoding and peak processing with progress feedback to help keep the interface responsive.
-- Undo/redo for supported editing operations.
-- Japanese-first responsive interface, keyboard shortcuts, and status messages.
+- Image assets can be imported and used as backgrounds in the video composition tool.
+- Basic video composition: use an optional video or image background, choose crop-to-fill or contain-with-letterboxing, set the video source range, and overlay timed text.
+- Caption queue: add, edit, and delete up to 20 captions with individual start/end times. Up to three active captions are drawn at once.
+- WebM video export combining the current audio mix with the selected background and text. The video background loops over its selected range when needed.
+- Project JSON save/load for track settings, video composition settings, caption timings, and imported image assets.
+- Stereo 16-bit PCM WAV export at 44.1 kHz or 48 kHz, plus optional compressed audio export using a browser-supported MediaRecorder codec.
+- Optional peak reduction to -1 dBFS, chunked WAV processing with progress feedback, undo/redo for supported operations, responsive Japanese UI, and keyboard shortcuts.
 
 ## Important limitations
 
-- AI speech transcription uses a speech-recognition model; other analysis and editing suggestions are based on local signal measurements and rules, not generative-AI understanding of the audio.
-- Video composition is a basic export utility, not a full video editor: it has no per-clip video timeline, transitions, multiple image layers, or advanced text animation. The selected video is looped if shorter than the audio mix; the output duration follows the audio mix.
-- Video import depends on the browser's media decoder and currently supports audio extraction for the audio workflow.
-- Project JSON can embed imported image assets, which can increase its file size. It does not include source audio or video files; re-import those files separately before restoring track settings.
-- WAV is the lossless-oriented export option. Compressed audio and WebM video exports depend on browser MediaRecorder support and run in real time; MP3 export is not currently available.
-- Processing runs in the browser; long or complex projects can still require substantial memory. The current renderer limits the mix to five minutes.
+- This is a browser-based editor; media decoding, codecs, memory use, and export support depend on the browser and device.
+- Video composition is a basic export utility, not a full non-linear video editor. There is no multi-clip video timeline, transitions, multiple image layers, or advanced text animation.
+- Video export uses MediaRecorder and runs in real time. Keep the tab in the foreground while exporting. WebM export is available only in browsers that support the required APIs and codecs.
+- The current audio renderer is limited to five minutes.
+- Project JSON embeds imported image files and can become large. It saves video composition settings and caption timings, but does not embed source audio or video files. Re-import those media files separately before restoring track settings or exporting.
+- Speech transcription uses a speech-recognition model. Other audio analysis and editing suggestions are based on local signal measurements and rules, not generative-AI understanding of the audio.
+- MP3 export is not currently available.
 
 ## Getting started
 
-1. Open the hosted OtoMAD Studio page in a supported desktop browser.
-2. Import audio or a supported video file.
+1. Open OtoMAD Studio in a supported desktop browser.
+2. Import audio, or import a supported video file to extract its audio.
 3. Arrange and edit tracks, then preview the mix.
-4. Use the analysis panel as a guide, and verify edits by listening.
-5. Export the completed mix as WAV.
-6. Optionally save project settings as JSON; keep the original media files separately.
+4. Optionally set a video or image background and configure timed captions.
+5. Export the completed mix as WAV, or export audio and visuals together as WebM if supported.
+6. Save project settings as JSON when needed; keep the original audio and video files separately.
 
 ## Technology
 
 - HTML, CSS, JavaScript
 - Web Audio API and OfflineAudioContext
+- MediaRecorder and Canvas API
 - GitHub Pages
 
 The project aims to keep development costs low and avoid paid processing APIs where possible.
@@ -58,13 +55,21 @@ You are responsible for confirming that you have the rights or permission to use
 
 ## 日本語
 
-OtoMAD Studioは、音MAD制作を支援するブラウザ型の音声編集ツールです。複数トラックの編集、タイムライン操作、BPM推定、拍合わせ、素材の簡易解析、WAV書き出しなどを備えています。
+OtoMAD Studioは、音MAD制作を支援するブラウザ型の音声編集ツールです。複数トラックの編集、タイムライン操作、BPM推定、拍合わせ、素材の簡易解析、WAV書き出しなどに対応しています。
 
-**現在の注意点**
-- AI文字起こしはWhisper系モデルを利用し、タイムスタンプ付きのセリフ候補を抽出します。その他の素材解析と編集案は、音量などの信号情報に基づくルールベースの機能です。
-- 画像または任意の動画を背景にし、文字を重ねて、音声ミックスと合成したWebM動画を書き出す簡易機能を追加しました。映像を画面いっぱいに切り取る表示と、全体を余白付きで表示するモードを選べます。フル機能の映像タイムライン、複数レイヤー、トランジションには未対応です。動画書き出しはリアルタイム処理で、対応ブラウザが必要です。
-- WAVと圧縮音声に加え、対応ブラウザでは音声ミックスと背景映像・文字を合成したWebM動画を書き出せます。動画はリアルタイム処理のため、ミックスの再生時間と同程度の時間がかかります。MP3書き出しは未対応です。
-- プロジェクト設定JSONには読み込んだ画像素材が埋め込まれます。ただし、音声・動画の本体は含まれないため、再読み込み時には元の音声・動画ファイルも必要です。画像が多い場合、JSONファイルのサイズが大きくなります。
-- 長いプロジェクトはメモリを多く使用する可能性があります。現行のミックス処理は5分以内に制限されています。
+### 映像プレビュー・動画書き出し
 
-無料の開発環境と標準的なWeb技術を優先し、段階的に機能を拡張します。
+- 動画または画像を背景に設定し、音声ミックスと合成したWebM動画を書き出せます。
+- 背景動画は開始・終了位置を秒単位で指定できます。指定範囲が音声より短い場合は、範囲内を繰り返します。
+- テロップは複数登録でき、各テロップの表示開始・終了時刻を指定できます。最大20件を登録でき、同時に表示されるテロップは最大3件です。
+- プロジェクトJSONには映像設定・テロップの時刻・画像素材が保存されます。音声・動画ファイル本体は保存されないため、再読み込み時には元ファイルも必要です。
+- 動画書き出しはリアルタイム処理で、対応ブラウザが必要です。フル機能の映像タイムライン、複数映像クリップの編集、トランジション、複数画像レイヤー、複雑な文字アニメーションには未対応です。
+
+### 注意点
+
+- AI文字起こしはWhisper系モデルを利用します。その他の素材解析や編集案は、音量などの信号情報に基づくルールベースの機能です。
+- WAVと対応ブラウザでの圧縮音声・WebM書き出しに対応しています。MP3書き出しは未対応です。
+- 現行のミックス処理は5分以内に制限されています。長いプロジェクトではメモリを多く使用する可能性があります。
+- 画像素材を多く保存すると、プロジェクトJSONのサイズが大きくなります。
+
+無料の開発環境と標準的なWeb技術を優先し、段階的に機能を拡張しています。
