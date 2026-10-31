@@ -568,6 +568,8 @@ footer{padding:22px 12px}
         <h2>④ 自動編集・音MAD作成補助</h2>
         <p class="muted help-box">音声素材の音量変化を調べ、短い音の切り出しや拍に合わせた配置を補助します。現在は<strong>対応キーワードとルールによる自動編集</strong>で、文章を自由に理解する生成AIではありません。自動生成では元の素材を消さず、ミュートして残します。Ctrl+Zで取り消せます。</p>
         <div class="field"><label for="aiGoal">自動作成の方向性</label><select id="aiGoal"><option value="rhythm">リズム重視・細かい刻み</option><option value="voice">セリフ中心・聞き取りやすさ</option><option value="chaos">テンポの速いカオス系</option><option value="music">原曲に合わせた音程・リズム</option></select></div>
+        <label class="muted" style="display:flex;align-items:center;gap:8px;margin-top:9px"><input id="autoEstimateBpm" type="checkbox" style="width:17px;height:17px">自動生成時に素材からBPMを推定する（指示文にBPMがない場合）</label>
+        <p class="muted">BPM推定は音量変化からの概算です。声や複雑な素材では誤ることがあるため、生成後にテンポを確認してください。</p>
         <div class="field" style="margin-top:10px">
           <label for="generationPrompt">作りたい音MADの指示（文章で入力）</label>
           <textarea id="generationPrompt" rows="3" maxlength="500" placeholder="例：BPM 150で、セリフ中心。細かく刻んでテンポの速いカオス系にする"></textarea>
@@ -3566,7 +3568,23 @@ $("autoGenerateBtn").addEventListener("click", () => {
     return;
   }
   const profile = parseGenerationPrompt($("generationPrompt").value);
-  const bpm = clamp(profile.bpm || Number(bpmInput.value) || 120, 40, 240);
+  let detectedBpm = null;
+  if (!profile.bpm && $("autoEstimateBpm").checked) {
+    let bestEstimate = null;
+    for (const source of sources) {
+      try {
+        const estimate = estimateBpm(source.buffer);
+        if (estimate && (!bestEstimate || estimate.confidence > bestEstimate.confidence)) {
+          bestEstimate = { ...estimate, sourceName: source.name };
+        }
+      } catch (error) { console.warn("BPM推定をスキップしました", error); }
+    }
+    if (bestEstimate) {
+      detectedBpm = bestEstimate;
+      bpmInput.value = String(bestEstimate.bpm);
+    }
+  }
+  const bpm = clamp(profile.bpm || (detectedBpm && detectedBpm.bpm) || Number(bpmInput.value) || 120, 40, 240);
   if (profile.bpm) bpmInput.value = profile.bpm;
   const beat = 60 / bpm;
   const division = Math.max(1, profile.division || Number($("snapDivision").value) || 4);
@@ -3710,6 +3728,7 @@ $("autoGenerateBtn").addEventListener("click", () => {
   status("プロンプト生成：" + generated.length + "クリップ（上限 " + maxClips + "、反復 " + repeatedCount + "個）、BPM " + bpm +
     "、配置間隔 " + interval.toFixed(3) + "秒" +
     (profile.notes.length ? "。反映：" + profile.notes.join("、") : "。方向性：" + $("aiGoal").selectedOptions[0].textContent) +
+    (detectedBpm ? "。素材から推定したBPM " + detectedBpm.bpm + "（対象：" + detectedBpm.sourceName + "、信頼度 " + (detectedBpm.confidence >= 0.35 ? "比較的明瞭" : detectedBpm.confidence >= 0.15 ? "不確か" : "かなり不確か") + "）" : "") +
     "。"+ (goal === "voice" && buckets.some(bucket => bucket.usedTranscript)
       ? "文字起こしの時間情報を使ってセリフを配置しました（分割：" + (profile.speechSplit || $("generationSpeechSplit").value || "natural") + "）。"
       : goal === "voice" ? "文字起こし結果がないため、音の立ち上がりを代用しています。セリフ中心にする場合は先にAI文字起こしを実行してください。" : "") +
