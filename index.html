@@ -334,6 +334,7 @@ input[type="range"]{accent-color:var(--accent)}
       <button id="stopBtn" class="secondary" disabled>■ 停止</button>
       <button id="exportBtn" disabled title="編集結果を音声ファイルとして保存します">完成音声を保存（WAV）</button>
       <button id="preflightBtn" class="secondary" disabled title="書き出し前に音量ピーク、クリップ、長さを検査します">書き出し前チェック</button>
+      <button id="preflightCopyBtn" class="secondary" disabled title="直近のチェック結果をテキストとしてコピーします">検査結果をコピー</button>
       <button id="saveProjectBtn" class="secondary" title="配置や音量などの設定をJSONファイルに保存します。音声本体は保存されません">編集設定を保存（JSON）</button>
       <button id="loadProjectBtn" class="secondary" title="以前保存したJSON設定を読み込みます。音声素材は別途読み込みが必要です">編集設定を読み込む</button>
       <button id="clearBtn" class="danger">全トラック削除</button>
@@ -879,6 +880,7 @@ function updateButtons() {
   playBtn.disabled = busy || !hasTracks;
   exportBtn.disabled = busy || !hasTracks;
   if ($("preflightBtn")) $("preflightBtn").disabled = busy || !hasTracks;
+  if ($("preflightCopyBtn")) $("preflightCopyBtn").disabled = busy || !lastPreflightReport;
   $("detectBpmBtn").disabled = busy || !hasTracks;
   $("analyzeBtn").disabled = busy || !hasTracks;
   $("aiTranscribeBtn").disabled = busy || !hasTracks;
@@ -2452,6 +2454,24 @@ async function encodeWav(buffer, onProgress = () => {}) {
   return arrayBuffer;
 }
 
+let lastPreflightReport = "";
+
+$("preflightCopyBtn").addEventListener("click", async () => {
+  if (!lastPreflightReport) return;
+  try {
+    await navigator.clipboard.writeText(lastPreflightReport);
+    status("書き出し前チェックの結果をコピーしました。");
+  } catch (_) {
+    const area = document.createElement("textarea");
+    area.value = lastPreflightReport;
+    document.body.append(area);
+    area.select();
+    const copied = document.execCommand("copy");
+    area.remove();
+    status(copied ? "書き出し前チェックの結果をコピーしました。" : "コピーできませんでした。結果を選択してコピーしてください。");
+  }
+});
+
 $("preflightBtn").addEventListener("click", async () => {
   if (busy || !tracks.length) return;
   stopPlayback();
@@ -2479,11 +2499,22 @@ $("preflightBtn").addEventListener("click", async () => {
     if (clippedSamples > 0) warnings.push("振幅が1.0以上のサンプル " + clippedSamples.toLocaleString("ja-JP") + "個");
     if (rms < 0.01) warnings.push("平均音量がかなり小さい可能性");
     if (!warnings.length) warnings.push("明確なピーク超過は検出されませんでした");
-    status("書き出し前チェック完了：長さ " + buffer.duration.toFixed(2) + "秒／ピーク " +
-      (Number.isFinite(peakDb) ? peakDb.toFixed(2) + " dBFS" : "無音") +
-      "／RMS " + (Number.isFinite(rmsDb) ? rmsDb.toFixed(2) + " dBFS" : "無音") +
-      "／トラック " + tracks.filter(track => !track.muted).length + "本。結果：" + warnings.join("、") +
-      "。検査は書き出しを保証するものではありません。");
+    const headroomNote = peak > 0 ? (peak >= Math.pow(10, -1 / 20)
+      ? "−1 dBFS目標への推奨音量調整：" + (20 * Math.log10(Math.pow(10, -1 / 20) / peak)).toFixed(2) + " dB"
+      : "−1 dBFS目標までのピーク余裕：" + (-1 - peakDb).toFixed(2) + " dB") : "無音のためピーク余裕は算出できません";
+    lastPreflightReport = [
+      "OtoMAD Studio — 書き出し前チェック",
+      "長さ：" + buffer.duration.toFixed(2) + "秒",
+      "ピーク：" + (Number.isFinite(peakDb) ? peakDb.toFixed(2) + " dBFS" : "無音"),
+      "RMS：" + (Number.isFinite(rmsDb) ? rmsDb.toFixed(2) + " dBFS" : "無音"),
+      "ミュートされていないトラック：" + tracks.filter(track => !track.muted).length + "本",
+      "振幅1.0以上のサンプル：" + clippedSamples.toLocaleString("ja-JP") + "個",
+      headroomNote,
+      "判定：" + warnings.join("、"),
+      "注：数値検査であり、聴感上の音質や書き出しの成功を保証するものではありません。"
+    ].join("\\n");
+    $("preflightCopyBtn").disabled = false;
+    status(lastPreflightReport.replaceAll("\\n", "／"));
   } catch (error) {
     console.error(error);
     status(error && error.message ? "チェックできませんでした：" + error.message : "書き出し前チェックに失敗しました。素材の長さやメモリ使用量を確認してください。");
