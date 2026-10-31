@@ -1164,6 +1164,7 @@ button:focus-visible{
     </div>
     <div class="toolbar">
       <button id="importBtn" class="primary" type="button" title="パソコン内の音声・動画ファイルを選択して読み込みます">＋ ファイルから音声・動画を選択</button>
+      <button id="cancelImportBtn" class="secondary" type="button" disabled title="待機中の読み込みを中止します。処理中のファイルは完了まで時間がかかる場合があります">読み込みを中止</button>
       <button id="playBtn" class="green" disabled title="読み込んだ素材を重ねて再生します">▶ 再生して確認</button>
       <button id="stopBtn" class="secondary" disabled>■ 停止</button>
       <button id="exportBtn" class="primary" disabled title="編集結果を音声ファイルとして保存します">完成音声を保存（WAV）</button>
@@ -1650,6 +1651,8 @@ async function getAudioContext() {
 function setBusy(value) {
   busy = value;
   fileInput.disabled = value;
+  const cancelImportButton = $("cancelImportBtn");
+  if (cancelImportButton) cancelImportButton.disabled = !value;
   updateButtons();
   renderTracks();
 }
@@ -2360,12 +2363,19 @@ async function loadAudioFiles(fileList) {
   if (!files.length || busy) return;
 
   setBusy(true);
+  let importCancelled = false;
   let completed = 0;
   let success = 0;
   let failed = 0;
   let historySaved = false;
   let uiFramePending = false;
   const results = new Array(files.length);
+  const cancelButton = $("cancelImportBtn");
+  if (cancelButton) cancelButton.onclick = () => {
+    importCancelled = true;
+    cancelButton.disabled = true;
+    status("読み込みの中止を要求しました。処理中のファイルが終了した後、待機中のファイルをスキップします。");
+  };
   const scheduleImportUI = () => {
     if (uiFramePending) return;
     uiFramePending = true;
@@ -2402,6 +2412,7 @@ async function loadAudioFiles(fileList) {
 
     const decodeAudioFile = async item => {
       const { file, index } = item;
+      if (importCancelled) return;
       if (!file.size) {
         results[index] = { error: new Error("ファイルが空です。") };
         completed++;
@@ -2412,6 +2423,7 @@ async function loadAudioFiles(fileList) {
         status("音声を高速読み込み中 " + completed + "/" + files.length + "：" + file.name + "（" + formatSize(file.size) + "）");
         const data = await file.arrayBuffer();
         const buffer = await ctx.decodeAudioData(data);
+        if (importCancelled) return;
         results[index] = { file, buffer };
         addDecodedTrack(file, buffer);
       } catch (error) {
@@ -2428,7 +2440,7 @@ async function loadAudioFiles(fileList) {
     let nextAudioJob = 0;
     const workerCount = Math.min(3, audioJobs.length);
     await Promise.all(Array.from({ length: workerCount }, async () => {
-      while (nextAudioJob < audioJobs.length) {
+      while (!importCancelled && nextAudioJob < audioJobs.length) {
         const item = audioJobs[nextAudioJob++];
         await decodeAudioFile(item);
       }
@@ -2436,6 +2448,7 @@ async function loadAudioFiles(fileList) {
 
     // Video audio extraction relies on browser playback/recording, so process it separately.
     for (const item of videoJobs) {
+      if (importCancelled) break;
       const { file, index } = item;
       if (!file.size) {
         results[index] = { error: new Error("ファイルが空です。") };
@@ -2447,6 +2460,7 @@ async function loadAudioFiles(fileList) {
         addVideoAsset(file);
         status("動画から音声を取り出しています " + completed + "/" + files.length + "：" + file.name + "（動画の長さに応じて時間がかかります）");
         const buffer = await extractAudioFromVideo(file, ctx);
+        if (importCancelled) continue;
         results[index] = { file, buffer };
         addDecodedTrack(file, buffer);
       } catch (error) {
@@ -2461,14 +2475,18 @@ async function loadAudioFiles(fileList) {
     failed = results.filter(result => !result || !result.buffer || !result.file).length;
     renderTracks();
     drawTimeline();
-    status(success
-      ? success + "個の素材を追加しました。" + (failed ? " 読み込めなかったファイル：" + failed + "個。対応形式の音声ファイルをお試しください。" : "")
-      : "読み込めませんでした。音声はMP3・WAV・M4A、動画はMP4・MOV・WebMをお試しください。動画の音声抽出には再生時間分かかる場合があります。");
+    status(importCancelled
+      ? "読み込みを中止しました。追加済みの " + success + " 個の素材は保持されています。"
+      : success
+        ? success + "個の素材を追加しました。" + (failed ? " 読み込めなかったファイル：" + failed + "個。対応形式の音声ファイルをお試しください。" : "")
+        : "読み込めませんでした。音声はMP3・WAV・M4A、動画はMP4・MOV・WebMをお試しください。動画の音声抽出には再生時間分かかる場合があります。");
   } catch (error) {
     console.error(error);
     status("読み込みを開始できませんでした。ページを再読み込みし、もう一度お試しください。");
   } finally {
     fileInput.value = "";
+    const cancelButton = $("cancelImportBtn");
+    if (cancelButton) { cancelButton.disabled = true; cancelButton.onclick = null; }
     setBusy(false);
     drawTimeline();
   }
