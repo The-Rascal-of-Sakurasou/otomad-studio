@@ -3292,8 +3292,9 @@ $("aiTranscribeBtn").addEventListener("click", async () => {
     status("AI文字起こしが完了しました（" + modelLabel + "・" + (language === "auto" ? "言語自動判定" : language === "japanese" ? "日本語指定" : "英語指定") + "）。認識した時間情報はセリフ中心の自動生成にも利用されます。");
   } catch (error) {
     console.error("AI文字起こしエラー:", error);
-    resultsBox.textContent = "AI文字起こしを開始できませんでした。インターネット接続を確認するか、ページを再読み込みして再度お試しください。";
-    status("AI文字起こしに失敗しました。モデルの取得に失敗した可能性があります。");
+    const detail = error && error.message ? String(error.message).slice(0, 240) : "詳細情報はありません";
+    resultsBox.textContent = "AI文字起こしに失敗しました。\n\n確認してください：\n・インターネット接続が有効か\n・モデルのダウンロードが完了するか\n・ブラウザのメモリが不足していないか\n・音声ファイルが正常に読み込まれているか\n\nエラー詳細： " + detail;
+    status("AI文字起こしに失敗しました。結果欄に原因の手がかりを表示しました。");
   } finally {
     setBusy(false);
     $("aiTranscribeBtn").disabled = tracks.length === 0;
