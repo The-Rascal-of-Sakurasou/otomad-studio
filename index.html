@@ -1201,50 +1201,30 @@ function setBusy(value) {
   renderTracks();
 }
 
-function updateNudgeSourceOptions() {
-  const select = $("nudgeSource");
+function updateTrackSourceOptions(id) {
+  const select = $(id);
   if (!select) return;
+  // Rebuild option DOM only when track IDs or names change.
+  const signature = tracks.map(track => String(track.id) + "\\u0000" + track.name).join("\\u0001");
+  if (select.dataset.trackOptionsSignature === signature) return;
+
   const previous = select.value;
-  select.replaceChildren();
+  const options = document.createDocumentFragment();
   for (const track of tracks) {
     const option = document.createElement("option");
     option.value = String(track.id);
     option.textContent = track.name;
-    select.append(option);
+    options.append(option);
   }
+  select.replaceChildren(options);
+  select.dataset.trackOptionsSignature = signature;
   if (tracks.some(track => String(track.id) === previous)) select.value = previous;
   else if (tracks.length) select.value = String(tracks[0].id);
 }
 
-function updateRepeatSourceOptions() {
-  const select = $("repeatSource");
-  if (!select) return;
-  const previous = select.value;
-  select.replaceChildren();
-  for (const track of tracks) {
-    const option = document.createElement("option");
-    option.value = String(track.id);
-    option.textContent = track.name;
-    select.append(option);
-  }
-  if (tracks.some(track => String(track.id) === previous)) select.value = previous;
-  else if (tracks.length) select.value = String(tracks[0].id);
-}
-
-function updateBpmSourceOptions() {
-  const select = $("bpmSource");
-  if (!select) return;
-  const previous = select.value;
-  select.replaceChildren();
-  for (const track of tracks) {
-    const option = document.createElement("option");
-    option.value = String(track.id);
-    option.textContent = track.name;
-    select.append(option);
-  }
-  if (tracks.some(track => String(track.id) === previous)) select.value = previous;
-  else if (tracks.length) select.value = String(tracks[0].id);
-}
+function updateNudgeSourceOptions() { updateTrackSourceOptions("nudgeSource"); }
+function updateRepeatSourceOptions() { updateTrackSourceOptions("repeatSource"); }
+function updateBpmSourceOptions() { updateTrackSourceOptions("bpmSource"); }
 
 function updateGroupActionButtons() {
   const group = $("groupFilter").value;
@@ -1258,20 +1238,25 @@ function updateGroupActionButtons() {
 function updateGroupFilterOptions() {
   const select = $("groupFilter");
   if (!select) return;
-  const previous = select.value;
   const groups = [...new Set(tracks.map(track => (track.group || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ja"));
-  select.replaceChildren();
-  const all = document.createElement("option");
-  all.value = "";
-  all.textContent = "すべてのトラック";
-  select.append(all);
-  groups.forEach(group => {
-    const option = document.createElement("option");
-    option.value = group;
-    option.textContent = group;
-    select.append(option);
-  });
-  select.value = groups.includes(previous) ? previous : "";
+  const signature = groups.join("\\u0001");
+  if (select.dataset.groupOptionsSignature !== signature) {
+    const previous = select.value;
+    const options = document.createDocumentFragment();
+    const all = document.createElement("option");
+    all.value = "";
+    all.textContent = "すべてのトラック";
+    options.append(all);
+    groups.forEach(group => {
+      const option = document.createElement("option");
+      option.value = group;
+      option.textContent = group;
+      options.append(option);
+    });
+    select.replaceChildren(options);
+    select.dataset.groupOptionsSignature = signature;
+    select.value = groups.includes(previous) ? previous : "";
+  }
   select.disabled = busy || groups.length === 0;
   $("groupSelectBtn").disabled = busy || !select.value;
   updateGroupActionButtons();
@@ -1280,8 +1265,9 @@ function updateGroupFilterOptions() {
 function updateButtons() {
   const hasTracks = tracks.length > 0;
   if (typeof updateVideoExportAvailability === "function") updateVideoExportAvailability();
-  for (const id of Array.from(selectedTrackIds)) {
-    if (!tracks.some(track => track.id === id)) selectedTrackIds.delete(id);
+  const trackIds = new Set(tracks.map(track => track.id));
+  for (const id of selectedTrackIds) {
+    if (!trackIds.has(id)) selectedTrackIds.delete(id);
   }
   const selectedCount = selectedTrackIds.size;
   $("selectAllTracksBtn").disabled = busy || !hasTracks || selectedCount === tracks.length;
