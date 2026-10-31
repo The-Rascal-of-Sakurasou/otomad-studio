@@ -13,7 +13,7 @@ OtoMAD Studio is a Japanese-first, browser-based editor for 音MAD workflows. It
 - AI speech transcription with selectable Whisper models, language options, timestamped segments, and sequential processing of tracks longer than three minutes. Model download progress is shown; model files are fetched from a CDN and inference runs in the browser.
 - Local audio metrics, quiet-region/transient candidates, and rule-based editing suggestions.
 - Image assets can be imported and used as backgrounds in a simple canvas-based video composition preview.
-- Basic WebM video export combines the current audio mix with an optional looping video background or imported image and a single-line text overlay. Export is real-time, browser-dependent, and limited by the five-minute audio renderer.
+- Basic WebM video export combines the current audio mix with an optional looping video background or imported image and a single-line text overlay. Video can be cropped to fill the frame or contained with letterboxing. Export is real-time, browser-dependent, and limited by the five-minute audio renderer.
 - Save and reload project settings as JSON. Imported image assets are embedded in the JSON; source audio and video files are not embedded and must be re-imported separately.
 - Export the mix as stereo 16-bit PCM WAV at 44.1 kHz or 48 kHz.
 - Optional compressed audio export using a browser-supported MediaRecorder codec (typically WebM/Opus; other supported containers may be selected by the browser). This records in real time and can take about as long as the mix duration.
@@ -60,7 +60,7 @@ OtoMAD Studioは、音MAD制作を支援するブラウザ型の音声編集ツ�
 
 **現在の注意点**
 - AI文字起こしはWhisper系モデルを利用し、タイムスタンプ付きのセリフ候補を抽出します。その他の素材解析と編集案は、音量などの信号情報に基づくルールベースの機能です。
-- 画像または任意の動画を背景にし、文字を重ねて、音声ミックスと合成したWebM動画を書き出す簡易機能を追加しました。フル機能の映像タイムライン、複数レイヤー、トランジションには未対応です。動画書き出しはリアルタイム処理で、対応ブラウザが必要です。
+- 画像または任意の動画を背景にし、文字を重ねて、音声ミックスと合成したWebM動画を書き出す簡易機能を追加しました。映像を画面いっぱいに切り取る表示と、全体を余白付きで表示するモードを選べます。フル機能の映像タイムライン、複数レイヤー、トランジションには未対応です。動画書き出しはリアルタイム処理で、対応ブラウザが必要です。
 - WAVと圧縮音声に加え、対応ブラウザでは音声ミックスと背景映像・文字を合成したWebM動画を書き出せます。動画はリアルタイム処理のため、ミックスの再生時間と同程度の時間がかかります。MP3書き出しは未対応です。
 - プロジェクト設定JSONには読み込んだ画像素材が埋め込まれます。ただし、音声・動画の本体は含まれないため、再読み込み時には元の音声・動画ファイルも必要です。画像が多い場合、JSONファイルのサイズが大きくなります。
 - 長いプロジェクトはメモリを多く使用する可能性があります。現行のミックス処理は5分以内に制限されています。
