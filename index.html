@@ -1335,6 +1335,17 @@ function createTrack(name, buffer) {
 $("importBtn").addEventListener("click", () => fileInput.click());
 
 $("addImagesBtn").addEventListener("click", () => imageInput.click());
+function clearImageAssets() {
+  for (const url of imageAssetUrls.values()) URL.revokeObjectURL(url);
+  imageAssetUrls.clear();
+  imageAssetFiles.clear();
+  imageAssets.replaceChildren();
+  const empty = document.createElement("p");
+  empty.className = "muted";
+  empty.textContent = "画像はまだ追加されていません。";
+  imageAssets.append(empty);
+}
+
 function addImageAsset(file) {
   if (!file || !file.type.startsWith("image/") || !file.size) return false;
   const url = URL.createObjectURL(file);
@@ -3302,6 +3313,9 @@ projectInput.addEventListener("change", async () => {
         ? project.snapDivision : 1);
 
     if (Array.isArray(project.imageAssets)) {
+      // Replace the current image set instead of duplicating it on repeated loads.
+      clearImageAssets();
+      let restoredImages = 0;
       for (const asset of project.imageAssets) {
         if (!asset || typeof asset.name !== "string" || typeof asset.dataUrl !== "string") continue;
         if (!/^data:image\/[a-zA-Z0-9.+-]+;base64,/.test(asset.dataUrl)) continue;
@@ -3309,11 +3323,12 @@ projectInput.addEventListener("change", async () => {
           const response = await fetch(asset.dataUrl);
           const blob = await response.blob();
           if (!blob.type.startsWith("image/") || !blob.size) continue;
-          addImageAsset(new File([blob], asset.name, { type: blob.type }));
+          if (addImageAsset(new File([blob], asset.name, { type: blob.type }))) restoredImages++;
         } catch (imageError) {
           console.warn("画像素材を復元できませんでした:", asset.name, imageError);
         }
       }
+      status("画像素材を " + restoredImages + "枚復元しました。音声ファイル本体は別途読み込んでください。");
     }
 
     let restored = 0;
