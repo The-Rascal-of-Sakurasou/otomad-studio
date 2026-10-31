@@ -781,6 +781,13 @@ a:hover{color:#312e81}
             </div>
           </div>
           <div class="field">
+            <label for="bulkPitch">選択トラックの音程変更（半音）</label>
+            <div class="row">
+              <input id="bulkPitch" type="number" min="-24" max="24" step="1" value="0" disabled>
+              <button id="bulkPitchApplyBtn" class="secondary" type="button" disabled>音程を一括変更</button>
+            </div>
+          </div>
+          <div class="field">
             <label for="bulkPosition">開始位置の移動（秒）</label>
             <div class="row">
               <input id="bulkPosition" type="number" min="-3600" max="3600" step="0.01" value="0.10" disabled>
@@ -1245,6 +1252,8 @@ function updateButtons() {
   $("bulkDeleteBtn").disabled = busy || selectedCount === 0;
   $("bulkVolume").disabled = busy || selectedCount === 0;
   $("bulkVolumeApplyBtn").disabled = busy || selectedCount === 0;
+  $("bulkPitch").disabled = busy || selectedCount === 0;
+  $("bulkPitchApplyBtn").disabled = busy || selectedCount === 0;
   $("bulkPosition").disabled = busy || selectedCount === 0;
   $("bulkPositionApplyBtn").disabled = busy || selectedCount === 0;
   $("bulkBeatSteps").disabled = busy || selectedCount === 0;
@@ -3519,6 +3528,25 @@ $("bulkAlignBtn").addEventListener("click", () => {
   renderTracks();
   drawTimeline();
   status(selectedTrackIds.size + "個のトラックを最寄りの拍グリッドに整列しました。Ctrl+Zで戻せます。");
+});
+
+$("bulkPitchApplyBtn").addEventListener("click", () => {
+  if (busy || !selectedTrackIds.size) return;
+  const semitones = Number($("bulkPitch").value);
+  if (!Number.isInteger(semitones) || semitones < -24 || semitones > 24) {
+    status("音程の変更量は−24～24半音の整数で指定してください。");
+    return;
+  }
+  const targets = tracks.filter(track => selectedTrackIds.has(track.id));
+  if (!targets.length) return;
+  recordHistory();
+  stopPlayback();
+  targets.forEach(track => {
+    track.pitch = clamp((Number(track.pitch) || 0) + semitones, -24, 24);
+  });
+  renderTracks();
+  drawTimeline();
+  status(targets.length + "個のトラックの音程を" + (semitones >= 0 ? "+" : "") + semitones + "半音変更しました。Ctrl+Zで戻せます。");
 });
 
 $("bulkPositionApplyBtn").addEventListener("click", () => {
