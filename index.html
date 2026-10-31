@@ -1631,6 +1631,8 @@ videoSourceInput.addEventListener("change", () => {
   drawVideoPreview();
 });
 clearVideoSourceBtn.addEventListener("click", () => {
+  if (videoDrawFrame) cancelAnimationFrame(videoDrawFrame);
+  videoDrawFrame = 0;
   if (videoSourceElement) {
     videoSourceElement.pause();
     videoSourceElement.removeAttribute("src");
