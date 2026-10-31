@@ -355,8 +355,8 @@ button:disabled{cursor:not-allowed;opacity:.48}
           <h3>まずはこの3つを使えばOK</h3>
           <ol class="quick-start"><li>音声を追加したあと、作りたい方向性を選びます。</li><li>下の欄に希望を書き、「プロンプトで音MADを生成」を押します。</li><li>「再生して確認」で聴き、気に入らなければCtrl+Zで戻します。</li></ol>
         </div>
-                <div class="toolbar"><button id="autoGenerateBtn" class="green" disabled>プロンプトで音MADを生成</button><button id="analyzeBtn" class="secondary" disabled>素材を解析して編集案を作成</button><button id="copyPlanBtn" class="secondary" disabled>編集案をコピー</button><button id="exportAnalysisBtn" class="secondary" disabled>解析データをJSON保存</button><button id="autoGainBtn" class="secondary" disabled>選択素材の音量を自動調整</button><button id="trimSilenceBtn" class="secondary" disabled>選択素材の前後の無音をカット</button><button id="prepareSelectedBtn" class="primary" disabled>選択素材をまとめて整える</button></div>
-        <p class="muted">補助機能：<strong>素材を解析</strong>は編集案を作るだけ、<strong>音量を自動調整</strong>と<strong>無音をカット</strong>は選択した素材に処理を加えます。迷ったら、まず自動生成だけ試してください。</p>
+                <div class="toolbar"><button id="autoGenerateBtn" class="green" disabled>プロンプトで音MADを生成</button><button id="aiTranscribeBtn" class="secondary" disabled>AIでセリフを文字起こし</button><button id="analyzeBtn" class="secondary" disabled>素材を解析して編集案を作成</button><button id="copyPlanBtn" class="secondary" disabled>編集案をコピー</button><button id="exportAnalysisBtn" class="secondary" disabled>解析データをJSON保存</button><button id="autoGainBtn" class="secondary" disabled>選択素材の音量を自動調整</button><button id="trimSilenceBtn" class="secondary" disabled>選択素材の前後の無音をカット</button><button id="prepareSelectedBtn" class="primary" disabled>選択素材をまとめて整える</button></div>
+        <p id="aiTranscribeHelp" class="muted">実験的なAI文字起こしは、ブラウザ内で音声認識モデルを読み込んで実行します。初回はモデルのダウンロードが必要で、時間と通信量がかかります。音声は外部の音声認識APIには送信しませんが、モデル取得のためインターネット接続が必要です。認識結果は誤る場合があります。</p><div id="aiTranscriptResults" class="help-box" style="display:none;white-space:pre-wrap;overflow-wrap:anywhere;margin:8px 0" aria-live="polite"></div><p class="muted">補助機能：<strong>素材を解析</strong>は編集案を作るだけ、<strong>音量を自動調整</strong>と<strong>無音をカット</strong>は選択した素材に処理を加えます。迷ったら、まず自動生成だけ試してください。</p>
         <details class="advanced-tools" style="margin-top:14px">
           <summary>細かい編集機能（慣れた方向け）</summary>
           <p class="muted">基本の自動生成だけなら、ここは変更しなくても使えます。素材の並べ替え、拍に合わせた複製・分割などを細かく指定したいときに開いてください。</p>
@@ -682,6 +682,7 @@ function updateButtons() {
   exportBtn.disabled = busy || !hasTracks;
   $("detectBpmBtn").disabled = busy || !hasTracks;
   $("analyzeBtn").disabled = busy || !hasTracks;
+  $("aiTranscribeBtn").disabled = busy || !hasTracks;
   $("autoGenerateBtn").disabled = busy || !hasTracks;
   $("arrangeBtn").disabled = busy || tracks.length < 2;
   $("onsetFromAnalysisBtn").disabled = busy || tracks.length < 2;
@@ -2789,6 +2790,108 @@ function detectTransientCandidates(buffer, sensitivity = 5) {
 }
 
 let lastAiPlan = "";
+let speechRecognitionPipelinePromise = null;
+const speechSegmentsByTrackId = new Map();
+
+// 実際の音声認識モデルを必要なときだけ読み込み、ブラウザ内で文字起こしする。
+async function getSpeechRecognitionPipeline() {
+  if (!speechRecognitionPipelinePromise) {
+    speechRecognitionPipelinePromise = import("https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1")
+      .then(({ pipeline }) => pipeline("automatic-speech-recognition", "Xenova/whisper-tiny"));
+  }
+  try {
+    return await speechRecognitionPipelinePromise;
+  } catch (error) {
+    speechRecognitionPipelinePromise = null;
+    throw error;
+  }
+}
+
+function makeMonoAudioInput(buffer, startTime, endTime, targetRate = 16000) {
+  const start = Math.max(0, Math.floor(startTime * buffer.sampleRate));
+  const end = Math.min(buffer.length, Math.floor(endTime * buffer.sampleRate));
+  const duration = Math.max(0, (end - start) / buffer.sampleRate);
+  const length = Math.floor(duration * targetRate);
+  const raw = new Float32Array(length);
+  const channels = Array.from({length: buffer.numberOfChannels}, (_, i) => buffer.getChannelData(i));
+  for (let i = 0; i < length; i++) {
+    const sourcePosition = start + i * buffer.sampleRate / targetRate;
+    const index = Math.floor(sourcePosition);
+    const fraction = sourcePosition - index;
+    let sum = 0;
+    for (const channel of channels) {
+      const a = channel[Math.min(index, end - 1)] || 0;
+      const b = channel[Math.min(index + 1, end - 1)] || 0;
+      sum += a + (b - a) * fraction;
+    }
+    raw[i] = sum / Math.max(1, channels.length);
+  }
+  return { raw, sampling_rate: targetRate, duration };
+}
+
+function formatSeconds(value) {
+  if (!Number.isFinite(value)) return "--:--";
+  const seconds = Math.max(0, Math.floor(value));
+  return Math.floor(seconds / 60) + ":" + String(seconds % 60).padStart(2, "0");
+}
+
+$("aiTranscribeBtn").addEventListener("click", async () => {
+  if (busy || !tracks.length) return;
+  const selected = tracks.filter(track => selectedTrackIds.has(track.id) && !track.muted);
+  const targets = selected.length ? selected : tracks.filter(track => !track.muted && !track.group.includes("AI自動生成"));
+  if (!targets.length) {
+    status("文字起こしする素材がありません。元の素材のミュートを解除するか、トラックを選択してください。");
+    return;
+  }
+  const resultsBox = $("aiTranscriptResults");
+  resultsBox.style.display = "block";
+  resultsBox.textContent = "音声認識モデルを準備しています。初回はダウンロードに時間がかかる場合があります…";
+  $("aiTranscribeBtn").disabled = true;
+  try {
+    const recognizer = await getSpeechRecognitionPipeline();
+    const report = [];
+    let done = 0;
+    for (const track of targets) {
+      const start = track.startTrim;
+      const end = Math.min(track.end, start + 180);
+      const input = makeMonoAudioInput(track.buffer, start, end);
+      if (!input.raw.length) continue;
+      status("AI文字起こし中：" + track.name + "（" + (done + 1) + "/" + targets.length + "）");
+      const output = await recognizer(
+        { raw: input.raw, sampling_rate: input.sampling_rate },
+        { return_timestamps: true, chunk_length_s: 20, stride_length_s: 4 }
+      );
+      const chunks = Array.isArray(output.chunks) ? output.chunks : [];
+      const segments = chunks.map(chunk => {
+        const timestamp = chunk.timestamp || [];
+        const relativeStart = Number(timestamp[0]);
+        const relativeEnd = Number(timestamp[1]);
+        return {
+          start: start + (Number.isFinite(relativeStart) ? relativeStart : 0),
+          end: start + (Number.isFinite(relativeEnd) && relativeEnd > relativeStart
+            ? relativeEnd : Math.min(input.duration, (Number.isFinite(relativeStart) ? relativeStart : 0) + 2.5)),
+          text: String(chunk.text || "").trim()
+        };
+      }).filter(segment => segment.text && segment.end > segment.start);
+      if (!segments.length && String(output.text || "").trim()) {
+        segments.push({start, end: Math.min(end, start + 3), text: String(output.text).trim()});
+      }
+      speechSegmentsByTrackId.set(track.id, segments);
+      report.push(track.name + "\n" + (segments.length
+        ? segments.map(segment => "[" + formatSeconds(segment.start) + "–" + formatSeconds(segment.end) + "] " + segment.text).join("\n")
+        : "音声を認識できませんでした。"));
+      done++;
+    }
+    resultsBox.textContent = report.join("\n\n");
+    status("AI文字起こしが完了しました。認識したセリフの時間情報は、セリフ中心の自動生成にも利用されます。");
+  } catch (error) {
+    console.error("AI文字起こしエラー:", error);
+    resultsBox.textContent = "AI文字起こしを開始できませんでした。インターネット接続を確認するか、ページを再読み込みして再度お試しください。";
+    status("AI文字起こしに失敗しました。モデルの取得に失敗した可能性があります。");
+  } finally {
+    $("aiTranscribeBtn").disabled = busy || tracks.length === 0;
+  }
+});
 
 // プロンプトはブラウザ内で解釈できる設定語に変換する。外部AI APIは使用しない。
 function parseGenerationPrompt(rawPrompt) {
@@ -2874,12 +2977,23 @@ $("autoGenerateBtn").addEventListener("click", () => {
   const generated = [];
   const eligibleSources = sources.filter(source => source.end - source.startTrim >= 0.08);
   const buckets = eligibleSources.map(source => {
+    const transcript = goal === "voice" ? speechSegmentsByTrackId.get(source.id) || [] : [];
+    const speechCandidates = transcript
+      .filter(segment => segment.start < source.end && segment.end > source.startTrim)
+      .map(segment => ({
+        time: clamp(segment.start, source.startTrim, source.end - 0.03),
+        speechEnd: clamp(segment.end, source.startTrim + 0.06, source.end),
+        transcript: segment.text,
+        strength: 0.75
+      }));
     const candidates = detectTransientCandidates(source.buffer, sensitivity)
       .filter(item => item.time >= source.startTrim && item.time < source.end - 0.03)
       .sort((a, b) => b.strength - a.strength)
       .slice(0, goal === "voice" ? 8 : goal === "music" ? 16 : 12)
       .sort((a, b) => a.time - b.time);
-    return { source, items: candidates.length ? candidates : [{ time: source.startTrim, strength: 0.01 }] };
+    const items = speechCandidates.length ? speechCandidates
+      : candidates.length ? candidates : [{ time: source.startTrim, strength: 0.01 }];
+    return { source, items, usedTranscript: speechCandidates.length > 0 };
   });
   if (!buckets.length) {
     status("素材から配置候補を検出できませんでした。");
@@ -2888,6 +3002,7 @@ $("autoGenerateBtn").addEventListener("click", () => {
 
   // 素材を交互に採用し、生成クリップ数を制限する。
   let round = 0;
+  let voiceCursor = 0;
   while (generated.length < maxClips && buckets.some(bucket => round < bucket.items.length)) {
     for (const bucket of buckets) {
       if (generated.length >= maxClips) break;
@@ -2897,17 +3012,19 @@ $("autoGenerateBtn").addEventListener("click", () => {
       const maxStrength = Math.max(0.0001, ...bucket.items.map(item => item.strength || 0));
       const peakLevel = clamp((candidate.strength || 0) / maxStrength, 0.35, 1);
       const start = clamp(candidate.time, source.startTrim, Math.max(source.startTrim, source.end - 0.04));
-      const desiredLength = goal === "voice"
-        ? beat * 0.62
-        : goal === "music"
-          ? beat * 0.88
-          : interval * (goal === "chaos" ? 1.2 : 1.65);
+      const desiredLength = candidate.speechEnd
+        ? clamp(candidate.speechEnd - start, 0.18, 4)
+        : goal === "voice"
+          ? beat * 0.62
+          : goal === "music"
+            ? beat * 0.88
+            : interval * (goal === "chaos" ? 1.2 : 1.65);
       const clipLength = Math.min(source.end - start, Math.max(0.06, desiredLength));
       if (clipLength < 0.04) continue;
       const index = generated.length;
       // 方向性ごとに配置パターンを変え、単調な等間隔配置を避ける。
       const position = goal === "voice"
-        ? Math.floor(index / 4) * beat * 4 + (index % 4) * beat
+        ? (candidate.speechEnd ? voiceCursor : Math.floor(index / 4) * beat * 4 + (index % 4) * beat)
         : goal === "music"
           ? Math.floor(index / 4) * beat * 4 + (index % 4) * beat
           : goal === "chaos"
@@ -2932,8 +3049,9 @@ $("autoGenerateBtn").addEventListener("click", () => {
         solo: false,
         fadeIn: Math.min(source.fadeIn, clipLength * 0.15),
         fadeOut: Math.min(source.fadeOut, clipLength * 0.15),
-        group: "AI自動生成"
+        group: candidate.transcript ? "AIセリフ抽出" : "AI自動生成"
       });
+      if (goal === "voice" && candidate.speechEnd) voiceCursor = position + clipLength + beat * 0.12;
     }
     round++;
   }
@@ -2955,7 +3073,7 @@ $("autoGenerateBtn").addEventListener("click", () => {
   status("プロンプト生成：" + generated.length + "クリップ、BPM " + bpm +
     "、配置間隔 " + interval.toFixed(3) + "秒" +
     (profile.notes.length ? "。反映：" + profile.notes.join("、") : "。方向性：" + $("aiGoal").selectedOptions[0].textContent) +
-    "。元素材はミュートして保持しています。再生して確認し、Ctrl+Zで全体を取り消せます。");
+    "。"+ (goal === "voice" && buckets.some(bucket => bucket.usedTranscript) ? "AI文字起こしの時間情報を使ってセリフを配置しました。" : "") + "元素材はミュートして保持しています。再生して確認し、Ctrl+Zで全体を取り消せます。");
 });
 
 $("trimSilenceBtn").addEventListener("click", () => {
