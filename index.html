@@ -726,7 +726,7 @@ a:hover{color:#312e81}
     <input id="projectInput" type="file" accept=".json,application/json" hidden>
     <input id="imageInput" type="file" accept="image/*,.png,.jpg,.jpeg,.gif,.webp,.bmp,.avif" multiple hidden>
     <section id="imageAssetsPanel" class="panel" style="margin-top:12px" aria-label="画像素材">
-      <div class="row spread"><h3 style="margin:0">画像素材</h3><button id="addImagesBtn" class="secondary" type="button">＋ 画像を追加</button></div>
+      <div class="row spread"><h3 style="margin:0">画像素材</h3><div class="toolbar" style="margin:0"><button id="addImagesBtn" class="secondary" type="button">＋ 画像を追加</button><button id="clearImagesBtn" class="secondary" type="button" disabled>画像を全削除</button></div></div>
       <p class="muted">画像を読み込んで参照素材として表示します。現在、画像は音声トラックやWAV書き出しには合成されません。</p>
       <div id="imageAssets" class="image-assets"><p class="muted">画像はまだ追加されていません。</p></div>
     </section>
@@ -1344,6 +1344,10 @@ function createTrack(name, buffer) {
 $("importBtn").addEventListener("click", () => fileInput.click());
 
 $("addImagesBtn").addEventListener("click", () => imageInput.click());
+function updateImageAssetControls() {
+  $("clearImagesBtn").disabled = imageAssetFiles.size === 0;
+}
+
 function clearImageAssets() {
   for (const url of imageAssetUrls.values()) URL.revokeObjectURL(url);
   imageAssetUrls.clear();
@@ -1353,7 +1357,15 @@ function clearImageAssets() {
   empty.className = "muted";
   empty.textContent = "画像はまだ追加されていません。";
   imageAssets.append(empty);
+  updateImageAssetControls();
 }
+
+$("clearImagesBtn").addEventListener("click", () => {
+  if (!imageAssetFiles.size) return;
+  if (!confirm("読み込んだ画像素材をすべて削除しますか？")) return;
+  clearImageAssets();
+  status("画像素材をすべて削除しました。");
+});
 
 function addImageAsset(file) {
   if (!file || !file.type.startsWith("image/") || !file.size) return false;
@@ -1387,10 +1399,12 @@ function addImageAsset(file) {
       empty.textContent = "画像はまだ追加されていません。";
       imageAssets.append(empty);
     }
+    updateImageAssetControls();
   });
   card.append(img, name, remove);
   if (!imageAssets.querySelector(".image-asset")) imageAssets.replaceChildren();
   imageAssets.append(card);
+  updateImageAssetControls();
   return true;
 }
 
