@@ -356,7 +356,7 @@ button:disabled{cursor:not-allowed;opacity:.48}
           <ol class="quick-start"><li>音声を追加したあと、作りたい方向性を選びます。</li><li>下の欄に希望を書き、「プロンプトで音MADを生成」を押します。</li><li>「再生して確認」で聴き、気に入らなければCtrl+Zで戻します。</li></ol>
         </div>
                 <div class="toolbar"><button id="autoGenerateBtn" class="green" disabled>プロンプトで音MADを生成</button><button id="aiTranscribeBtn" class="secondary" disabled>AIでセリフを文字起こし</button><button id="analyzeBtn" class="secondary" disabled>素材を解析して編集案を作成</button><button id="copyPlanBtn" class="secondary" disabled>編集案をコピー</button><button id="exportAnalysisBtn" class="secondary" disabled>解析データをJSON保存</button><button id="autoGainBtn" class="secondary" disabled>選択素材の音量を自動調整</button><button id="trimSilenceBtn" class="secondary" disabled>選択素材の前後の無音をカット</button><button id="prepareSelectedBtn" class="primary" disabled>選択素材をまとめて整える</button></div>
-        <p id="aiTranscribeHelp" class="muted">実験的なAI文字起こしは、ブラウザ内で音声認識モデルを読み込んで実行します。初回はモデルのダウンロードが必要で、時間と通信量がかかります。音声は外部の音声認識APIには送信しませんが、モデル取得のためインターネット接続が必要です。認識結果は誤る場合があります。</p><div id="aiTranscriptResults" class="help-box" style="display:none;white-space:pre-wrap;overflow-wrap:anywhere;margin:8px 0" aria-live="polite"></div><p class="muted">補助機能：<strong>素材を解析</strong>は編集案を作るだけ、<strong>音量を自動調整</strong>と<strong>無音をカット</strong>は選択した素材に処理を加えます。迷ったら、まず自動生成だけ試してください。</p>
+        <p id="aiTranscribeHelp" class="muted">実験的なAI文字起こしは、ブラウザ内で音声認識モデルを読み込んで実行します。初回はモデルのダウンロードが必要で、時間と通信量がかかります。音声は外部の音声認識APIには送信しませんが、モデル取得のためインターネット接続が必要です。認識結果は誤る場合があります。</p><div id="aiTranscriptResults" class="help-box" style="display:none;white-space:pre-wrap;overflow-wrap:anywhere;margin:8px 0" aria-live="polite"></div><div class="toolbar"><button id="exportSrtBtn" class="secondary" type="button" disabled>字幕をSRTで書き出す</button><button id="copyTranscriptBtn" class="secondary" type="button" disabled>文字起こしをコピー</button></div><p class="muted">補助機能：<strong>素材を解析</strong>は編集案を作るだけ、<strong>音量を自動調整</strong>と<strong>無音をカット</strong>は選択した素材に処理を加えます。迷ったら、まず自動生成だけ試してください。</p>
         <details class="advanced-tools" style="margin-top:14px">
           <summary>細かい編集機能（慣れた方向け）</summary>
           <p class="muted">基本の自動生成だけなら、ここは変更しなくても使えます。素材の並べ替え、拍に合わせた複製・分割などを細かく指定したいときに開いてください。</p>
@@ -683,6 +683,9 @@ function updateButtons() {
   $("detectBpmBtn").disabled = busy || !hasTracks;
   $("analyzeBtn").disabled = busy || !hasTracks;
   $("aiTranscribeBtn").disabled = busy || !hasTracks;
+  const hasTranscript = Array.from(speechSegmentsByTrackId.entries()).some(([id, segments]) => tracks.some(track => track.id === id) && segments.length > 0);
+  $("exportSrtBtn").disabled = busy || !hasTranscript;
+  $("copyTranscriptBtn").disabled = busy || !hasTranscript;
   $("autoGenerateBtn").disabled = busy || !hasTracks;
   $("arrangeBtn").disabled = busy || tracks.length < 2;
   $("onsetFromAnalysisBtn").disabled = busy || tracks.length < 2;
@@ -2891,6 +2894,74 @@ $("aiTranscribeBtn").addEventListener("click", async () => {
   } finally {
     setBusy(false);
     $("aiTranscribeBtn").disabled = tracks.length === 0;
+  }
+});
+
+function toSrtTimestamp(seconds) {
+  const totalMs = Math.max(0, Math.round(seconds * 1000));
+  const hours = Math.floor(totalMs / 3600000);
+  const minutes = Math.floor((totalMs % 3600000) / 60000);
+  const secs = Math.floor((totalMs % 60000) / 1000);
+  const millis = totalMs % 1000;
+  return String(hours).padStart(2, "0") + ":" +
+    String(minutes).padStart(2, "0") + ":" +
+    String(secs).padStart(2, "0") + "," +
+    String(millis).padStart(3, "0");
+}
+
+function getTranscriptEntries() {
+  const entries = [];
+  for (const track of tracks) {
+    const segments = speechSegmentsByTrackId.get(track.id) || [];
+    for (const segment of segments) {
+      const text = String(segment.text || "").trim();
+      if (!text || !Number.isFinite(segment.start) || !Number.isFinite(segment.end) || segment.end <= segment.start) continue;
+      entries.push({ start: segment.start, end: segment.end, text, trackName: track.name });
+    }
+  }
+  return entries.sort((a, b) => a.start - b.start || a.end - b.end);
+}
+
+$("exportSrtBtn").addEventListener("click", () => {
+  const entries = getTranscriptEntries();
+  if (!entries.length) {
+    status("先にAI文字起こしを実行してください。");
+    return;
+  }
+  const content = entries.map((entry, index) =>
+    (index + 1) + "\n" +
+    toSrtTimestamp(entry.start) + " --> " + toSrtTimestamp(entry.end) + "\n" +
+    entry.text.replace(/\r?\n/g, " ")
+  ).join("\n\n") + "\n";
+  const blob = new Blob(["\\uFEFF", content], { type: "application/x-subrip;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = "otomad-transcript.srt";
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+  status("字幕ファイル（SRT）を書き出しました。複数素材の字幕は時間順に並べています。");
+});
+
+$("copyTranscriptBtn").addEventListener("click", async () => {
+  const entries = getTranscriptEntries();
+  if (!entries.length) {
+    status("先にAI文字起こしを実行してください。");
+    return;
+  }
+  const content = entries.map(entry =>
+    "[" + formatSeconds(entry.start) + "–" + formatSeconds(entry.end) + "] " +
+    (tracks.length > 1 ? entry.trackName + ": " : "") + entry.text
+  ).join("\n");
+  try {
+    await navigator.clipboard.writeText(content);
+    status("文字起こし結果をクリップボードにコピーしました。");
+  } catch (error) {
+    const resultsBox = $("aiTranscriptResults");
+    resultsBox.textContent = content;
+    status("自動コピーできなかったため、結果欄に文字起こしを表示しました。手動でコピーしてください。");
   }
 });
 
