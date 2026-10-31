@@ -1334,6 +1334,11 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
         <div class="field"><label for="videoOverlayEnd">文字の表示終了（秒・0＝最後まで）</label><input id="videoOverlayEnd" type="number" min="0" max="300" step="0.1" value="0"></div>
         <div class="field"><label for="videoPreviewTime">静止画プレビュー時刻（秒）</label><input id="videoPreviewTime" type="number" min="0" max="300" step="0.1" value="0"></div>
       </div>
+      <div class="field" style="margin-top:10px">
+        <div class="row spread"><strong>複数テロップ（字幕キュー）</strong><button id="addVideoCaptionBtn" class="secondary" type="button">＋ テロップを追加</button></div>
+        <p class="muted">各テロップに表示時間を設定できます。終了時刻を0にすると音声の最後まで表示します。</p>
+        <div id="videoCaptionList" class="grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:8px"></div>
+      </div>
       <div class="timeline-box" style="margin-top:10px"><canvas id="videoPreviewCanvas" width="960" height="540" style="display:block;width:100%;height:auto;aspect-ratio:16/9;background:#09090b" aria-label="動画合成プレビュー"></canvas></div>
       <div class="toolbar" style="margin-top:10px"><button id="exportVideoBtn" class="primary" type="button" disabled>音声と合成して動画を書き出す（WebM）</button><span id="videoExportProgress" class="stat" aria-live="polite">音声素材を読み込むと書き出せます。</span></div>
       <p class="muted">注意：出力はWebM形式です。ブラウザや端末によって対応状況が異なります。書き出し中はタブを前面に保ってください。選んだ動画ファイル自体はプロジェクトJSONには保存されません。</p>
@@ -2185,6 +2190,31 @@ function drawVideoPreview(timeSeconds) {
     ctx.strokeText(text, width / 2, height - fontSize * 0.65, maxWidth);
     ctx.fillText(text, width / 2, height - fontSize * 0.65, maxWidth);
   }
+  const captions = [...videoCaptionList.querySelectorAll(".video-caption-row")];
+  const activeCaptions = captions.filter(row => {
+    const text = row.querySelector(".caption-text").value.trim();
+    const start = Math.max(0, Number(row.querySelector(".caption-start").value) || 0);
+    const end = Math.max(0, Number(row.querySelector(".caption-end").value) || 0);
+    return text && timelineTime >= start && (end <= 0 || timelineTime <= end);
+  }).slice(0, 3);
+  activeCaptions.forEach((row, index) => {
+    const text = row.querySelector(".caption-text").value.trim();
+    const fontSize = Math.max(20, Math.round(width * 0.036));
+    const y = height - fontSize * (0.7 + (activeCaptions.length - 1 - index) * 1.35);
+    ctx.font = "700 " + fontSize + 'px system-ui, sans-serif';
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    ctx.lineJoin = "round";
+    ctx.lineWidth = Math.max(4, fontSize * 0.16);
+    ctx.strokeStyle = "rgba(0,0,0,.88)";
+    ctx.fillStyle = "#fff";
+    const maxWidth = width * 0.9;
+    let visibleText = text;
+    while (ctx.measureText(visibleText).width > maxWidth && visibleText.length > 1) visibleText = visibleText.slice(0, -1);
+    if (visibleText !== text) visibleText = visibleText.slice(0, -1) + "…";
+    ctx.strokeText(visibleText, width / 2, y, maxWidth);
+    ctx.fillText(visibleText, width / 2, y, maxWidth);
+  });
 }
 
 function animateVideoPreview() {
@@ -2243,6 +2273,48 @@ videoOverlayStart.addEventListener("input", drawVideoPreview);
 videoOverlayEnd.addEventListener("input", drawVideoPreview);
 videoPreviewTime.addEventListener("input", drawVideoPreview);
 
+function addVideoCaption(values = {}) {
+  const row = document.createElement("div");
+  row.className = "field video-caption-row";
+  row.style.cssText = "display:grid;gap:6px;min-width:0";
+  const textLabel = document.createElement("label");
+  textLabel.textContent = "テロップ";
+  const textInput = document.createElement("input");
+  textInput.type = "text"; textInput.maxLength = 120; textInput.className = "caption-text";
+  textInput.placeholder = "表示する文字"; textInput.value = values.text || "";
+  textLabel.append(textInput);
+  const times = document.createElement("div");
+  times.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:6px";
+  const startWrap = document.createElement("label");
+  startWrap.textContent = "開始（秒）";
+  const startInput = document.createElement("input");
+  startInput.type = "number"; startInput.min = "0"; startInput.max = "300"; startInput.step = "0.1";
+  startInput.className = "caption-start"; startInput.value = String(values.start ?? 0);
+  startWrap.append(startInput);
+  const endWrap = document.createElement("label");
+  endWrap.textContent = "終了（0＝最後）";
+  const endInput = document.createElement("input");
+  endInput.type = "number"; endInput.min = "0"; endInput.max = "300"; endInput.step = "0.1";
+  endInput.className = "caption-end"; endInput.value = String(values.end ?? 0);
+  endWrap.append(endInput);
+  times.append(startWrap, endWrap);
+  const remove = document.createElement("button");
+  remove.type = "button"; remove.className = "secondary"; remove.textContent = "このテロップを削除";
+  remove.addEventListener("click", () => { row.remove(); drawVideoPreview(); });
+  row.append(textLabel, times, remove);
+  videoCaptionList.append(row);
+  [textInput, startInput, endInput].forEach(input => input.addEventListener("input", drawVideoPreview));
+  return row;
+}
+addVideoCaptionBtn.addEventListener("click", () => {
+  if (videoCaptionList.querySelectorAll(".video-caption-row").length >= 20) {
+    videoExportProgress.textContent = "テロップは最大20件まで追加できます。";
+    return;
+  }
+  addVideoCaption();
+  drawVideoPreview();
+});
+
 function validateVideoSettings(showMessage = false) {
   const start = Math.max(0, Number(videoClipStart.value) || 0);
   const end = Math.max(0, Number(videoClipEnd.value) || 0);
@@ -2272,6 +2344,8 @@ function setVideoComposerLocked(locked) {
   videoOverlayStart.disabled = locked;
   videoOverlayEnd.disabled = locked;
   videoPreviewTime.disabled = locked || !!videoSourceElement;
+  addVideoCaptionBtn.disabled = locked || videoCaptionList.querySelectorAll(".video-caption-row").length >= 20;
+  videoCaptionList.querySelectorAll("input,button").forEach(input => { input.disabled = locked; });
   $("addImagesBtn").disabled = locked;
   $("clearImagesBtn").disabled = locked || imageAssetFiles.size === 0;
   imageAssets.querySelectorAll("button").forEach(button => { button.disabled = locked; });
