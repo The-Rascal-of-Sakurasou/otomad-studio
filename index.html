@@ -2557,17 +2557,25 @@ $("seekSlider").addEventListener("input", event => {
   }, { passive: false });
 })();
 
+let lastPlayheadPaintAt = 0;
 function animatePlayhead() {
   if (!playbackStartedAt || !playbackDuration) {
     cancelAnimationFrame(playbackFrame);
     playbackFrame = 0;
+    lastPlayheadPaintAt = 0;
     return;
   }
-  drawTimeline();
-  if ((performance.now() - playbackStartedAt) / 1000 < playbackDuration) {
+  const now = performance.now();
+  // The playhead does not need a full canvas redraw on every 60/120 Hz display frame.
+  if (now - lastPlayheadPaintAt >= 33) {
+    drawTimeline();
+    lastPlayheadPaintAt = now;
+  }
+  if ((now - playbackStartedAt) / 1000 < playbackDuration) {
     playbackFrame = requestAnimationFrame(animatePlayhead);
   } else {
     playbackStartedAt = 0;
+    lastPlayheadPaintAt = 0;
     drawTimeline();
   }
 }
