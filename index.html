@@ -2322,12 +2322,24 @@ function validateVideoSettings(showMessage = false) {
   const overlayEnd = Math.max(0, Number(videoOverlayEnd.value) || 0);
   const clipInvalid = end > 0 && end <= start;
   const overlayInvalid = overlayEnd > 0 && overlayEnd < overlayStart;
+  const invalidCaption = Array.from(videoCaptionList.querySelectorAll(".video-caption-row")).some(row => {
+    const start = Math.max(0, Number(row.querySelector(".caption-start").value) || 0);
+    const end = Math.max(0, Number(row.querySelector(".caption-end").value) || 0);
+    const endInput = row.querySelector(".caption-end");
+    const invalid = end > 0 && end <= start;
+    endInput.setCustomValidity(invalid ? "終了時刻は開始時刻より後にしてください。0は最後までです。" : "");
+    return invalid;
+  });
   videoClipEnd.setCustomValidity(clipInvalid ? "終了位置は開始位置より後にしてください。0は動画の最後です。" : "");
   videoOverlayEnd.setCustomValidity(overlayInvalid ? "文字の終了時刻は開始時刻以降にしてください。" : "");
-  if (showMessage && (clipInvalid || overlayInvalid)) {
-    videoExportProgress.textContent = clipInvalid ? "背景動画の終了位置は開始位置より後に設定してください（0＝動画の最後）。" : "文字の終了時刻は開始時刻以降に設定してください（0＝最後まで）。";
+  if (showMessage && (clipInvalid || overlayInvalid || invalidCaption)) {
+    videoExportProgress.textContent = clipInvalid
+      ? "背景動画の終了位置は開始位置より後に設定してください（0＝動画の最後）。"
+      : overlayInvalid
+        ? "文字の終了時刻は開始時刻以降に設定してください（0＝最後まで）。"
+        : "テロップの終了時刻は開始時刻より後に設定してください（0＝最後まで）。";
   }
-  return !clipInvalid && !overlayInvalid;
+  return !clipInvalid && !overlayInvalid && !invalidCaption;
 }
 [videoClipStart, videoClipEnd, videoOverlayStart, videoOverlayEnd].forEach(input => {
   input.addEventListener("input", () => { validateVideoSettings(false); drawVideoPreview(); });
@@ -2365,7 +2377,14 @@ function updateVideoExportAvailability() {
 
 exportVideoBtn.addEventListener("click", async () => {
   if (videoExporting || !tracks.length) return;
-  if (!validateVideoSettings(true)) { videoClipEnd.reportValidity(); videoOverlayEnd.reportValidity(); return; }
+  if (!validateVideoSettings(true)) {
+    const invalidCaptionEnd = Array.from(videoCaptionList.querySelectorAll(".caption-end"))
+      .find(input => !input.checkValidity());
+    if (videoClipEnd.validationMessage) videoClipEnd.reportValidity();
+    else if (videoOverlayEnd.validationMessage) videoOverlayEnd.reportValidity();
+    else if (invalidCaptionEnd) invalidCaptionEnd.reportValidity();
+    return;
+  }
   if (videoSourceElement && videoSourceElement.error) { videoExportProgress.textContent = "背景動画の読み込みに失敗しています。別の動画ファイルを選択してください。"; return; }
   const mimeType = [
     "video/webm;codecs=vp9,opus",
@@ -4449,6 +4468,21 @@ function projectSettings() {
     masterVolume: Number(masterVolume.value),
     sampleRate: Number($("sampleRate").value),
     snapDivision: Number($("snapDivision").value),
+    videoComposition: {
+      imageSelection: videoImageSelect.value,
+      fitMode: videoFitMode.value,
+      clipStart: Number(videoClipStart.value) || 0,
+      clipEnd: Number(videoClipEnd.value) || 0,
+      overlayText: videoOverlayText.value,
+      overlayStart: Number(videoOverlayStart.value) || 0,
+      overlayEnd: Number(videoOverlayEnd.value) || 0,
+      previewTime: Number(videoPreviewTime.value) || 0,
+      captions: Array.from(videoCaptionList.querySelectorAll(".video-caption-row")).map(row => ({
+        text: row.querySelector(".caption-text").value,
+        start: Number(row.querySelector(".caption-start").value) || 0,
+        end: Number(row.querySelector(".caption-end").value) || 0
+      }))
+    },
     tracks: tracks.map(t => ({
       name: t.name,
       position: t.position,
@@ -4555,6 +4589,34 @@ projectInput.addEventListener("change", async () => {
         }
       }
       status("画像素材を " + restoredImages + "枚復元しました。音声ファイル本体は別途読み込んでください。");
+    }
+
+    if (project.videoComposition && typeof project.videoComposition === "object") {
+      const videoSettings = project.videoComposition;
+      videoFitMode.value = ["cover", "contain"].includes(videoSettings.fitMode) ? videoSettings.fitMode : "cover";
+      videoClipStart.value = String(clamp(Number(videoSettings.clipStart) || 0, 0, 300));
+      videoClipEnd.value = String(clamp(Number(videoSettings.clipEnd) || 0, 0, 300));
+      videoOverlayText.value = typeof videoSettings.overlayText === "string" ? videoSettings.overlayText.slice(0, 200) : "";
+      videoOverlayStart.value = String(clamp(Number(videoSettings.overlayStart) || 0, 0, 300));
+      videoOverlayEnd.value = String(clamp(Number(videoSettings.overlayEnd) || 0, 0, 300));
+      videoPreviewTime.value = String(clamp(Number(videoSettings.previewTime) || 0, 0, 300));
+      videoCaptionList.replaceChildren();
+      const captions = Array.isArray(videoSettings.captions) ? videoSettings.captions.slice(0, 20) : [];
+      for (const caption of captions) {
+        if (!caption || typeof caption !== "object") continue;
+        addVideoCaption({
+          text: typeof caption.text === "string" ? caption.text.slice(0, 120) : "",
+          start: clamp(Number(caption.start) || 0, 0, 300),
+          end: clamp(Number(caption.end) || 0, 0, 300)
+        });
+      }
+      refreshVideoImageOptions();
+      if (typeof videoSettings.imageSelection === "string") {
+        const matchingOption = Array.from(videoImageSelect.options).some(option => option.value === videoSettings.imageSelection);
+        if (matchingOption) videoImageSelect.value = videoSettings.imageSelection;
+      }
+      validateVideoSettings(false);
+      drawVideoPreview();
     }
 
     let restored = 0;
