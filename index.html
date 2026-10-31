@@ -737,6 +737,18 @@ a:hover{color:#312e81}
       <p class="muted">画像を読み込んで参照素材として表示します。現在、画像は音声トラックやWAV書き出しには合成されません。</p>
       <div id="imageAssets" class="image-assets"><p class="muted">画像はまだ追加されていません。</p></div>
     </section>
+    <section class="panel" id="videoComposerPanel" style="margin-top:12px">
+      <div class="row spread"><h3 style="margin:0">映像プレビュー・動画書き出し</h3><span class="stat">最大5分 / WebM対応ブラウザ</span></div>
+      <p class="muted">動画または画像を背景にし、文字を重ねて、現在の音声ミックスと合成した動画を書き出します。映像素材の長さに関わらず、音声ミックスの長さで出力します。</p>
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px">
+        <div class="field"><label for="videoSourceInput">背景動画（任意）</label><input id="videoSourceInput" type="file" accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov,.m4v"></div>
+        <div class="field"><label for="videoImageSelect">背景画像（動画がない場合）</label><select id="videoImageSelect"><option value="">単色背景</option></select></div>
+        <div class="field"><label for="videoOverlayText">画面に重ねる文字</label><input id="videoOverlayText" type="text" maxlength="120" placeholder="例：作品名・セリフ"></div>
+      </div>
+      <div class="timeline-box" style="margin-top:10px"><canvas id="videoPreviewCanvas" width="960" height="540" style="display:block;width:100%;height:auto;aspect-ratio:16/9;background:#09090b" aria-label="動画合成プレビュー"></canvas></div>
+      <div class="toolbar" style="margin-top:10px"><button id="exportVideoBtn" class="primary" type="button" disabled>音声と合成して動画を書き出す（WebM）</button><span id="videoExportProgress" class="stat" aria-live="polite">音声素材を読み込むと書き出せます。</span></div>
+      <p class="muted">注意：出力はWebM形式です。ブラウザや端末によって対応状況が異なります。書き出し中はタブを前面に保ってください。選んだ動画ファイル自体はプロジェクトJSONには保存されません。</p>
+    </section>
     <div id="status" class="status" role="status" aria-live="polite">
       音声または動画ファイルを追加してください。
     </div>
@@ -1251,6 +1263,7 @@ function updateGroupFilterOptions() {
 
 function updateButtons() {
   const hasTracks = tracks.length > 0;
+  if (typeof updateVideoExportAvailability === "function") updateVideoExportAvailability();
   for (const id of Array.from(selectedTrackIds)) {
     if (!tracks.some(track => track.id === id)) selectedTrackIds.delete(id);
   }
@@ -1368,6 +1381,7 @@ function clearImageAssets() {
   empty.textContent = "画像はまだ追加されていません。";
   imageAssets.append(empty);
   updateImageAssetControls();
+  if (typeof refreshVideoImageOptions === "function") refreshVideoImageOptions();
 }
 
 $("clearImagesBtn").addEventListener("click", () => {
@@ -1415,6 +1429,7 @@ function addImageAsset(file) {
   if (!imageAssets.querySelector(".image-asset")) imageAssets.replaceChildren();
   imageAssets.append(card);
   updateImageAssetControls();
+  if (typeof refreshVideoImageOptions === "function") refreshVideoImageOptions();
   return true;
 }
 
@@ -1426,6 +1441,219 @@ imageInput.addEventListener("change", () => {
   status(added ? added + "枚の画像を参照素材として追加しました。" : "画像を読み込めませんでした。PNG・JPG・WebPなどの画像ファイルを選択してください。");
 });
 
+
+// 映像プレビューと、現在の音声ミックスを合成したWebM書き出し。
+const videoSourceInput = $("videoSourceInput");
+const videoImageSelect = $("videoImageSelect");
+const videoOverlayText = $("videoOverlayText");
+const videoPreviewCanvas = $("videoPreviewCanvas");
+const videoPreviewCtx = videoPreviewCanvas.getContext("2d");
+const exportVideoBtn = $("exportVideoBtn");
+const videoExportProgress = $("videoExportProgress");
+let videoSourceUrl = "";
+let videoSourceElement = null;
+let videoDrawFrame = 0;
+let videoExporting = false;
+
+function refreshVideoImageOptions() {
+  const selected = videoImageSelect.value;
+  videoImageSelect.replaceChildren();
+  const none = document.createElement("option");
+  none.value = "";
+  none.textContent = "単色背景";
+  videoImageSelect.append(none);
+  for (const [id, file] of imageAssetFiles) {
+    const option = document.createElement("option");
+    option.value = id;
+    option.textContent = file.name;
+    videoImageSelect.append(option);
+  }
+  if ([...videoImageSelect.options].some(option => option.value === selected)) videoImageSelect.value = selected;
+  drawVideoPreview();
+}
+
+function drawVideoPreview() {
+  if (!videoPreviewCtx) return;
+  const ctx = videoPreviewCtx;
+  const width = videoPreviewCanvas.width, height = videoPreviewCanvas.height;
+  ctx.fillStyle = "#09090b";
+  ctx.fillRect(0, 0, width, height);
+  let source = null;
+  if (videoSourceElement && videoSourceElement.readyState >= 2 && videoSourceElement.videoWidth > 0) {
+    source = videoSourceElement;
+  } else {
+    const imageUrl = imageAssetUrls.get(videoImageSelect.value);
+    if (imageUrl) {
+      const image = document.querySelector('[data-image-id="' + videoImageSelect.value + '"] img');
+      if (image && image.complete && image.naturalWidth > 0) source = image;
+    }
+  }
+  if (source) {
+    const sw = source.videoWidth || source.naturalWidth;
+    const sh = source.videoHeight || source.naturalHeight;
+    const scale = Math.max(width / sw, height / sh);
+    const dw = sw * scale, dh = sh * scale;
+    ctx.drawImage(source, (width - dw) / 2, (height - dh) / 2, dw, dh);
+  }
+  const label = videoOverlayText.value.trim();
+  if (label) {
+    const fontSize = Math.max(24, Math.round(width * 0.045));
+    ctx.font = "700 " + fontSize + 'px system-ui, sans-serif';
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    ctx.lineJoin = "round";
+    ctx.lineWidth = Math.max(4, fontSize * 0.16);
+    ctx.strokeStyle = "rgba(0,0,0,.85)";
+    ctx.fillStyle = "#fff";
+    const maxWidth = width * 0.9;
+    let text = label;
+    while (ctx.measureText(text).width > maxWidth && text.length > 1) text = text.slice(0, -1);
+    if (text !== label) text = text.slice(0, -1) + "…";
+    ctx.strokeText(text, width / 2, height - fontSize * 0.65, maxWidth);
+    ctx.fillText(text, width / 2, height - fontSize * 0.65, maxWidth);
+  }
+}
+
+function animateVideoPreview() {
+  drawVideoPreview();
+  videoDrawFrame = requestAnimationFrame(animateVideoPreview);
+}
+
+videoSourceInput.addEventListener("change", () => {
+  const file = videoSourceInput.files && videoSourceInput.files[0];
+  if (!file) return;
+  if (videoSourceUrl) URL.revokeObjectURL(videoSourceUrl);
+  if (videoSourceElement) {
+    videoSourceElement.pause();
+    videoSourceElement.removeAttribute("src");
+    videoSourceElement.load();
+  }
+  videoSourceUrl = URL.createObjectURL(file);
+  videoSourceElement = document.createElement("video");
+  videoSourceElement.muted = true;
+  videoSourceElement.loop = true;
+  videoSourceElement.playsInline = true;
+  videoSourceElement.preload = "auto";
+  videoSourceElement.src = videoSourceUrl;
+  videoSourceElement.addEventListener("loadeddata", () => {
+    videoSourceElement.play().catch(() => {});
+    drawVideoPreview();
+  }, { once: true });
+  videoSourceElement.addEventListener("error", () => {
+    videoExportProgress.textContent = "動画を読み込めませんでした。MP4またはWebMをお試しください。";
+  }, { once: true });
+  videoSourceElement.load();
+  videoExportBtn.disabled = !(window.MediaRecorder && videoPreviewCanvas.captureStream && tracks.length);
+  drawVideoPreview();
+});
+videoImageSelect.addEventListener("change", drawVideoPreview);
+videoOverlayText.addEventListener("input", drawVideoPreview);
+
+function updateVideoExportAvailability() {
+  const supported = !!(window.MediaRecorder && videoPreviewCanvas.captureStream &&
+    (MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus") ||
+     MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus") ||
+     MediaRecorder.isTypeSupported("video/webm")));
+  exportVideoBtn.disabled = videoExporting || !tracks.length || !supported;
+  if (!supported) videoExportProgress.textContent = "このブラウザはWebM動画の書き出しに対応していません。";
+  else if (!tracks.length && !videoExporting) videoExportProgress.textContent = "音声素材を読み込むと書き出せます。";
+  refreshVideoImageOptions();
+}
+
+exportVideoBtn.addEventListener("click", async () => {
+  if (videoExporting || !tracks.length) return;
+  const mimeType = [
+    "video/webm;codecs=vp9,opus",
+    "video/webm;codecs=vp8,opus",
+    "video/webm"
+  ].find(type => MediaRecorder.isTypeSupported(type));
+  if (!mimeType) {
+    videoExportProgress.textContent = "WebM書き出しに対応していません。";
+    return;
+  }
+  videoExporting = true;
+  exportVideoBtn.disabled = true;
+  let audioContext = null, audioSource = null, recorder = null, frameId = 0;
+  let stopped = false;
+  const streams = [];
+  const chunks = [];
+  try {
+    status("音声ミックスを準備しています。動画書き出し中はタブを前面に保ってください。");
+    videoExportProgress.textContent = "音声をレンダリングしています…";
+    const mix = await renderMix();
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) throw new Error("このブラウザは音声合成に対応していません。");
+    audioContext = new AudioContextClass({ sampleRate: mix.sampleRate });
+    if (audioContext.state === "suspended") await audioContext.resume();
+    const audioDestination = audioContext.createMediaStreamDestination();
+    audioSource = audioContext.createBufferSource();
+    audioSource.buffer = mix;
+    audioSource.connect(audioDestination);
+    const canvasStream = videoPreviewCanvas.captureStream(30);
+    streams.push(canvasStream, audioDestination.stream);
+    const combined = new MediaStream([
+      ...canvasStream.getVideoTracks(),
+      ...audioDestination.stream.getAudioTracks()
+    ]);
+    recorder = new MediaRecorder(combined, { mimeType, videoBitsPerSecond: 5000000, audioBitsPerSecond: 192000 });
+    recorder.ondataavailable = event => { if (event.data && event.data.size) chunks.push(event.data); };
+    const recordingDone = new Promise((resolve, reject) => {
+      recorder.onerror = () => reject(new Error("動画の記録に失敗しました。素材を短くして再試行してください。"));
+      recorder.onstop = resolve;
+    });
+    const duration = mix.duration;
+    let startAt = 0;
+    const drawFrame = () => {
+      if (stopped) return;
+      drawVideoPreview();
+      const elapsed = Math.max(0, (performance.now() - startAt) / 1000);
+      videoExportProgress.textContent = "動画を書き出しています… " + Math.min(elapsed, duration).toFixed(1) + " / " + duration.toFixed(1) + " 秒";
+      if (elapsed >= duration) {
+        stopped = true;
+        if (recorder.state !== "inactive") recorder.stop();
+        return;
+      }
+      frameId = requestAnimationFrame(drawFrame);
+    };
+    recorder.start(1000);
+    startAt = performance.now();
+    frameId = requestAnimationFrame(drawFrame);
+    audioSource.onended = () => {
+      if (!stopped) {
+        stopped = true;
+        cancelAnimationFrame(frameId);
+        if (recorder && recorder.state !== "inactive") recorder.stop();
+      }
+    };
+    audioSource.start();
+    await recordingDone;
+    const blob = new Blob(chunks, { type: mimeType });
+    if (!blob.size) throw new Error("書き出しデータが空でした。");
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "otomad-studio-video.webm";
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+    videoExportProgress.textContent = "完了：動画ファイルを保存しました（" + (blob.size / 1024 / 1024).toFixed(1) + " MB）。";
+    status("音声ミックスと映像を合成したWebM動画を書き出しました。");
+  } catch (error) {
+    console.error(error);
+    videoExportProgress.textContent = error.message || "動画の書き出しに失敗しました。";
+    status(error.message || "動画の書き出しに失敗しました。");
+  } finally {
+    stopped = true;
+    cancelAnimationFrame(frameId);
+    if (audioSource) { try { audioSource.stop(); } catch (_) {} }
+    if (recorder && recorder.state !== "inactive") { try { recorder.stop(); } catch (_) {} }
+    for (const stream of streams) for (const track of stream.getTracks()) track.stop();
+    if (audioContext) await audioContext.close().catch(() => {});
+    videoExporting = false;
+    updateVideoExportAvailability();
+  }
+});
 
 // 動画ファイルから音声を取り出し、編集可能な音声トラックとして読み込む。
 async function extractAudioFromVideo(file, ctx) {
