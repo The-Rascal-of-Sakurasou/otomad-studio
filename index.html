@@ -1079,6 +1079,8 @@ a:hover{color:#302681}
         <div class="field"><label for="videoImageSelect">背景画像（動画がない場合）</label><select id="videoImageSelect"><option value="">単色背景</option></select></div>
         <div class="field"><label for="videoFitMode">映像の表示方法</label><select id="videoFitMode"><option value="cover">画面いっぱい（端を切り取る）</option><option value="contain">全体を表示（余白あり）</option></select></div>
         <div class="field"><label for="videoOverlayText">画面に重ねる文字</label><input id="videoOverlayText" type="text" maxlength="120" placeholder="例：作品名・セリフ"></div>
+        <div class="field"><label for="videoOverlayStart">文字の表示開始（秒）</label><input id="videoOverlayStart" type="number" min="0" max="300" step="0.1" value="0"></div>
+        <div class="field"><label for="videoOverlayEnd">文字の表示終了（秒・0＝最後まで）</label><input id="videoOverlayEnd" type="number" min="0" max="300" step="0.1" value="0"></div>
       </div>
       <div class="timeline-box" style="margin-top:10px"><canvas id="videoPreviewCanvas" width="960" height="540" style="display:block;width:100%;height:auto;aspect-ratio:16/9;background:#09090b" aria-label="動画合成プレビュー"></canvas></div>
       <div class="toolbar" style="margin-top:10px"><button id="exportVideoBtn" class="primary" type="button" disabled>音声と合成して動画を書き出す（WebM）</button><span id="videoExportProgress" class="stat" aria-live="polite">音声素材を読み込むと書き出せます。</span></div>
@@ -1849,6 +1851,8 @@ const videoSourceInput = $("videoSourceInput");
 const clearVideoSourceBtn = $("clearVideoSourceBtn");
 const videoImageSelect = $("videoImageSelect");
 const videoOverlayText = $("videoOverlayText");
+const videoOverlayStart = $("videoOverlayStart");
+const videoOverlayEnd = $("videoOverlayEnd");
 const videoFitMode = $("videoFitMode");
 const videoPreviewCanvas = $("videoPreviewCanvas");
 const videoPreviewCtx = videoPreviewCanvas.getContext("2d");
@@ -1876,8 +1880,9 @@ function refreshVideoImageOptions() {
   drawVideoPreview();
 }
 
-function drawVideoPreview() {
+function drawVideoPreview(timeSeconds) {
   if (!videoPreviewCtx) return;
+  const timelineTime = Number.isFinite(timeSeconds) ? Math.max(0, timeSeconds) : (videoSourceElement && Number.isFinite(videoSourceElement.currentTime) ? videoSourceElement.currentTime : 0);
   const ctx = videoPreviewCtx;
   const width = videoPreviewCanvas.width, height = videoPreviewCanvas.height;
   ctx.fillStyle = "#09090b";
@@ -1902,7 +1907,12 @@ function drawVideoPreview() {
     ctx.drawImage(source, (width - dw) / 2, (height - dh) / 2, dw, dh);
   }
   const label = videoOverlayText.value.trim();
-  if (label) {
+  const rawStart = Number(videoOverlayStart.value);
+  const rawEnd = Number(videoOverlayEnd.value);
+  const overlayStart = Number.isFinite(rawStart) ? Math.max(0, rawStart) : 0;
+  const overlayEnd = Number.isFinite(rawEnd) ? Math.max(0, rawEnd) : 0;
+  const overlayVisible = timelineTime >= overlayStart && (overlayEnd <= 0 || timelineTime <= overlayEnd);
+  if (label && overlayVisible) {
     const fontSize = Math.max(24, Math.round(width * 0.045));
     ctx.font = "700 " + fontSize + 'px system-ui, sans-serif';
     ctx.textAlign = "center";
@@ -1979,6 +1989,8 @@ function setVideoComposerLocked(locked) {
   videoImageSelect.disabled = locked;
   videoFitMode.disabled = locked;
   videoOverlayText.disabled = locked;
+  videoOverlayStart.disabled = locked;
+  videoOverlayEnd.disabled = locked;
   $("addImagesBtn").disabled = locked;
   $("clearImagesBtn").disabled = locked || imageAssetFiles.size === 0;
   imageAssets.querySelectorAll("button").forEach(button => { button.disabled = locked; });
@@ -2066,8 +2078,8 @@ exportVideoBtn.addEventListener("click", async () => {
     let startAt = 0;
     const drawFrame = () => {
       if (stopped) return;
-      drawVideoPreview();
       const elapsed = Math.max(0, (performance.now() - startAt) / 1000);
+      drawVideoPreview(elapsed);
       videoExportProgress.textContent = "動画を書き出しています… " + Math.min(elapsed, duration).toFixed(1) + " / " + duration.toFixed(1) + " 秒";
       if (elapsed >= duration) {
         stopped = true;
