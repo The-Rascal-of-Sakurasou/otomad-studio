@@ -548,6 +548,34 @@ footer{color:#7a8498}
   *,*::before,*::after{scroll-behavior:auto!important;transition:none!important}
 }
 
+/* Workflow simplification: keep the four common actions visible and group secondary actions */
+#projectPanel>.toolbar{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  align-items:stretch;
+  padding:14px;
+  gap:10px;
+  border:1px solid #dce3f0;
+  border-radius:12px;
+  background:#f8faff;
+}
+#projectPanel>.toolbar button{min-height:48px}
+#projectPanel>.toolbar #importBtn,
+#projectPanel>.toolbar #exportBtn{box-shadow:0 2px 6px rgba(67,56,202,.16)}
+.project-more-actions{margin-top:10px;border:1px solid #dce3f0;border-radius:10px;padding:8px 12px;background:#fbfcff}
+.project-more-actions>summary{padding:8px 2px;color:#35415b}
+.project-secondary-actions{margin-bottom:0}
+.project-secondary-actions button{flex:1 1 190px}
+#projectPanel #imageAssetsPanel{background:#fbfcff;border:1px dashed #d6ddea;box-shadow:none}
+@media(max-width:800px){
+  #projectPanel>.toolbar{grid-template-columns:repeat(2,minmax(0,1fr));padding:10px}
+  #projectPanel>.toolbar button{min-height:46px}
+}
+@media(max-width:420px){
+  #projectPanel>.toolbar{grid-template-columns:1fr}
+  #projectPanel>.toolbar button{width:100%}
+}
+
 
 /* Readability pass: stronger contrast, calmer spacing, clearer controls */
 :root{
@@ -675,19 +703,25 @@ a:hover{color:#312e81}
       <span class="badge">ブラウザ内で処理</span>
     </div>
     <div class="toolbar">
-      <button id="importBtn">＋ 音声・動画を追加</button>
+      <button id="importBtn" class="primary">＋ 音声・動画を追加</button>
       <button id="playBtn" class="green" disabled title="読み込んだ素材を重ねて再生します">▶ 再生して確認</button>
       <button id="stopBtn" class="secondary" disabled>■ 停止</button>
-      <button id="exportBtn" disabled title="編集結果を音声ファイルとして保存します">完成音声を保存（WAV）</button>
-      <button id="exportCompressedBtn" class="secondary" disabled title="対応ブラウザでは圧縮音声として保存します。WAVより小さくなりますが、再生時間と同程度の時間がかかります">圧縮音声を保存（WebM/Opus）</button>
-      <button id="preflightBtn" class="secondary" disabled title="書き出し前に音量ピーク、クリップ、長さを検査します">書き出し前チェック</button>
-      <button id="preflightCopyBtn" class="secondary" disabled title="直近のチェック結果をテキストとしてコピーします">検査結果をコピー</button>
-      <button id="saveProjectBtn" class="secondary" title="配置や音量などの設定をJSONファイルに保存します。音声本体は保存されません">編集設定を保存（JSON）</button>
-      <button id="loadProjectBtn" class="secondary" title="以前保存したJSON設定を読み込みます。音声素材は別途読み込みが必要です">編集設定を読み込む</button>
-      <button id="clearBtn" class="danger">全トラック削除</button>
-      <button id="undoBtn" class="secondary" disabled>↶ 元に戻す</button>
-      <button id="redoBtn" class="secondary" disabled>↷ やり直す</button>
+      <button id="exportBtn" class="primary" disabled title="編集結果を音声ファイルとして保存します">完成音声を保存（WAV）</button>
     </div>
+    <details class="advanced-tools project-more-actions">
+      <summary>その他の操作（圧縮保存・編集設定・取り消し・チェック）</summary>
+      <div class="toolbar project-secondary-actions" style="margin-top:10px">
+        <button id="exportCompressedBtn" class="secondary" disabled title="対応ブラウザでは圧縮音声として保存します。WAVより小さくなりますが、再生時間と同程度の時間がかかります">圧縮音声を保存（WebM/Opus）</button>
+        <button id="preflightBtn" class="secondary" disabled title="書き出し前に音量ピーク、クリップ、長さを検査します">書き出し前チェック</button>
+        <button id="preflightCopyBtn" class="secondary" disabled title="直近のチェック結果をテキストとしてコピーします">検査結果をコピー</button>
+        <button id="saveProjectBtn" class="secondary" title="配置や音量などの設定をJSONファイルに保存します。音声本体は保存されません">編集設定を保存（JSON）</button>
+        <button id="loadProjectBtn" class="secondary" title="以前保存したJSON設定を読み込みます。音声素材は別途読み込みが必要です">編集設定を読み込む</button>
+        <button id="undoBtn" class="secondary" disabled>↶ 元に戻す</button>
+        <button id="redoBtn" class="secondary" disabled>↷ やり直す</button>
+        <button id="clearBtn" class="danger">全トラック削除</button>
+      </div>
+      <p class="muted">編集設定のJSONには音声本体は含まれません。削除は元に戻せる場合がありますが、実行前に内容を確認してください。</p>
+    </details>
     <input id="fileInput" type="file" accept="audio/*,video/*,.mp4,.mov,.webm,.m4v,.mkv,.avi" multiple hidden>
     <input id="projectInput" type="file" accept=".json,application/json" hidden>
     <input id="imageInput" type="file" accept="image/*,.png,.jpg,.jpeg,.gif,.webp,.bmp,.avif" multiple hidden>
