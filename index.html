@@ -143,13 +143,125 @@ button:disabled{cursor:not-allowed;opacity:.48}
 }
 
 .image-assets{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;margin-top:10px}.image-asset{min-width:0;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--panel2)}.image-asset img{display:block;width:100%;height:100px;object-fit:contain;background:#101014}.image-asset .image-asset-name{font-size:12px;padding:6px;overflow-wrap:anywhere}.image-asset button{margin:0 6px 6px;width:calc(100% - 12px)}
+
+/* Japanese-first visual refresh: calm light surfaces, readable Japanese typography */
+:root{
+  color-scheme:light;
+  --bg:#f4f6fb;
+  --panel:#ffffff;
+  --panel2:#f0f3fa;
+  --border:#d8deea;
+  --accent:#4f46e5;
+  --text:#20253a;
+  --muted:#65708a;
+  --danger:#c24155;
+  --green:#087f68;
+}
+html{scroll-behavior:smooth}
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:"Noto Sans JP","Yu Gothic UI","Yu Gothic",Meiryo,system-ui,-apple-system,sans-serif;
+  line-height:1.65;
+  letter-spacing:.01em;
+}
+header{
+  background:linear-gradient(120deg,#ffffff 0%,#eef2ff 72%,#e8f7f5 100%);
+  border-bottom:1px solid var(--border);
+  padding-top:25px;padding-bottom:23px;
+}
+.brand{font-size:clamp(24px,3vw,32px);letter-spacing:-.03em;color:#20253a}
+.brand span{color:var(--accent)}
+.subtitle{color:#58637d;font-size:14px}
+.quick-nav{
+  background:rgba(248,250,255,.94);
+  border-bottom:1px solid var(--border);
+  box-shadow:0 3px 12px rgba(30,41,80,.05);
+}
+.quick-nav a{border-color:#d7deef;background:#fff;color:#38415e}
+.quick-nav a:hover,.quick-nav a:focus-visible{border-color:var(--accent);background:#eef2ff;color:#312e81}
+main{padding-top:22px;padding-bottom:30px}
+.panel{
+  background:var(--panel);
+  border-color:var(--border);
+  border-radius:14px;
+  box-shadow:0 4px 18px rgba(35,47,90,.045);
+  padding:19px;
+}
+h2{font-size:17px;letter-spacing:.01em;color:#252b45}
+h3{font-size:15px;color:#303954}
+.section-intro,.muted{color:var(--muted)}
+.help-box{background:#f0f3ff;border-left-color:var(--accent);color:#38415e}
+.help-box strong,.primary-action-box h3{color:#3730a3}
+.primary-action-box{background:#f5f6ff;border-color:#c9d0ff}
+.advanced-tools{background:#f8f9fd;border-color:var(--border)}
+.advanced-tools>summary{color:#3730a3}
+.step-guide a{background:#f8f9ff;border-color:#dce2f0;color:#303954}
+.step-guide a strong{color:#4338ca}
+.step-guide a:hover{border-color:var(--accent);background:#eef2ff}
+button{
+  background:var(--accent);color:#fff;border-radius:9px;
+  box-shadow:0 1px 2px rgba(35,41,90,.08);
+  transition:background .15s ease,transform .15s ease,box-shadow .15s ease;
+}
+button:hover{filter:none;background:#4338ca;box-shadow:0 3px 9px rgba(79,70,229,.18)}
+button:active{transform:translateY(1px)}
+button.secondary{background:#e9edf7;color:#35405d;border:1px solid #d6ddec}
+button.secondary:hover{background:#dde4f4}
+button.danger{background:#fff0f1;color:#a61b36;border:1px solid #f2c5ce}
+button.danger:hover{background:#ffe2e7}
+button.green{background:#087f68;color:#fff}
+button.green:hover{background:#066854}
+input,select,textarea{accent-color:var(--accent)}
+input[type=number],select,textarea{
+  background:#fff;color:var(--text);border-color:#cbd3e3;border-radius:9px;
+}
+input[type=number]:focus,select:focus,textarea:focus{border-color:var(--accent)}
+.stat{background:#eef1f8;color:#59647e;border:1px solid #e0e5f0}
+.track{background:#fbfcff;border-color:#dce2ee}
+.track.is-selected{
+  border-color:var(--accent);
+  background:#f0f2ff;
+  box-shadow:0 0 0 1px rgba(79,70,229,.13);
+}
+.track-select-label:has(input:checked){color:#4338ca}
+.track-number{color:#4338ca}
+.wave{background:#e7ebf5;border:1px solid #d5dceb}
+.wave-help strong{color:#4338ca}
+#transientPreview,.ai-plan{
+  background:#f7f8fc;color:#26304a;border-color:#d8deea;border-radius:9px;
+}
+.badge{background:#e9eaff;color:#3730a3;border:1px solid #d9dcff}
+.empty{background:#fafbfe;border-color:#cbd4e5;color:#68738d}
+.timeline-box{background:#e9edf6;border:1px solid #d8deea}
+details{border-top-color:#e0e5ef}
+summary{color:#424d69}
+hr{border-top-color:#e0e5ef}
+.image-asset{background:#f8f9fd;border-color:#dce2ee}
+.image-asset img{background:#eef1f7}
+footer{color:#68738d}
+.skip-link{background:var(--accent);color:#fff}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,a:focus-visible,canvas:focus-visible{
+  outline:3px solid #818cf8;outline-offset:3px;
+}
+@media(max-width:600px){
+  main{padding:12px 10px 22px}
+  .panel{padding:14px;border-radius:12px}
+  header{padding:20px 14px}
+  .quick-nav{box-shadow:0 2px 8px rgba(30,41,80,.04)}
+  .toolbar button{min-height:42px}
+}
+@media(prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{transition:none!important;animation:none!important}
+}
 </style>
 </head>
 <body>
 <a class="skip-link" href="#mainContent">メインコンテンツへ移動</a>
 <header>
   <div class="brand"><span>OtoMAD</span> Studio</div>
-  <div class="subtitle">音MAD制作・音声編集ツール</div>
+  <div class="subtitle">音MAD制作スタジオ｜素材の読み込みから編集・書き出しまで、ブラウザで</div>
 </header>
 <nav class="quick-nav" aria-label="ページ内ナビゲーション"><a href="#projectPanel">プロジェクト</a><a href="#timelinePanel">タイムライン</a><a href="#tracksPanel">トラック編集</a><a href="#bpmPanel">BPM・リズム</a><a href="#assistantPanel">制作アシスタント</a><a href="#masterPanel">書き出し設定</a></nav>
 
