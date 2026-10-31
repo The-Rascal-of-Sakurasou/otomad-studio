@@ -2336,7 +2336,27 @@ async function loadAudioFiles(fileList) {
   let completed = 0;
   let success = 0;
   let failed = 0;
+  let historySaved = false;
+  let uiFramePending = false;
   const results = new Array(files.length);
+  const scheduleImportUI = () => {
+    if (uiFramePending) return;
+    uiFramePending = true;
+    requestAnimationFrame(() => {
+      uiFramePending = false;
+      renderTracks();
+      drawTimeline();
+    });
+  };
+  const addDecodedTrack = (file, buffer) => {
+    if (!historySaved) {
+      recordHistory();
+      historySaved = true;
+    }
+    tracks.push(createTrack(file.name, buffer));
+    success++;
+    scheduleImportUI();
+  };
   const isVideoFile = file => /^video\//i.test(file.type) ||
     /\.(mp4|mov|webm|m4v|mkv|avi)$/i.test(file.name);
   const formatSize = bytes => bytes >= 1024 * 1024
@@ -2366,6 +2386,7 @@ async function loadAudioFiles(fileList) {
         const data = await file.arrayBuffer();
         const buffer = await ctx.decodeAudioData(data);
         results[index] = { file, buffer };
+        addDecodedTrack(file, buffer);
       } catch (error) {
         results[index] = { file, error };
         console.error("音声の読み込みに失敗:", file.name, error);
@@ -2400,6 +2421,7 @@ async function loadAudioFiles(fileList) {
         status("動画から音声を取り出しています " + completed + "/" + files.length + "：" + file.name + "（動画の長さに応じて時間がかかります）");
         const buffer = await extractAudioFromVideo(file, ctx);
         results[index] = { file, buffer };
+        addDecodedTrack(file, buffer);
       } catch (error) {
         results[index] = { file, error };
         console.error("動画の音声読み込みに失敗:", file.name, error);
@@ -2408,17 +2430,8 @@ async function loadAudioFiles(fileList) {
       }
     }
 
-    // Add decoded tracks in the same order as the files selected by the user.
-    for (const result of results) {
-      if (result && result.buffer && result.file) {
-        recordHistory();
-        tracks.push(createTrack(result.file.name, result.buffer));
-        success++;
-      } else {
-        failed++;
-      }
-    }
-
+    // Count failed files; successful tracks have already been added as soon as decoding finished.
+    failed = results.filter(result => !result || !result.buffer || !result.file).length;
     renderTracks();
     drawTimeline();
     status(success
