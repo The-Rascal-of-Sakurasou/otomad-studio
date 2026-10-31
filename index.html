@@ -2846,7 +2846,7 @@ $("aiTranscribeBtn").addEventListener("click", async () => {
   const resultsBox = $("aiTranscriptResults");
   resultsBox.style.display = "block";
   resultsBox.textContent = "音声認識モデルを準備しています。初回はダウンロードに時間がかかる場合があります…";
-  $("aiTranscribeBtn").disabled = true;
+  setBusy(true);
   try {
     const recognizer = await getSpeechRecognitionPipeline();
     const report = [];
@@ -2889,7 +2889,8 @@ $("aiTranscribeBtn").addEventListener("click", async () => {
     resultsBox.textContent = "AI文字起こしを開始できませんでした。インターネット接続を確認するか、ページを再読み込みして再度お試しください。";
     status("AI文字起こしに失敗しました。モデルの取得に失敗した可能性があります。");
   } finally {
-    $("aiTranscribeBtn").disabled = busy || tracks.length === 0;
+    setBusy(false);
+    $("aiTranscribeBtn").disabled = tracks.length === 0;
   }
 });
 
