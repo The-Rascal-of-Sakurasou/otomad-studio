@@ -3095,30 +3095,40 @@ $("aiTranscribeBtn").addEventListener("click", async () => {
     let done = 0;
     for (const track of targets) {
       const start = track.startTrim;
-      const end = Math.min(track.end, start + 180);
-      const input = makeMonoAudioInput(track.buffer, start, end);
-      if (!input.raw.length) continue;
-      status("AI文字起こし中：" + track.name + "（" + (done + 1) + "/" + targets.length + "）");
-      const recognitionOptions = { return_timestamps: true, chunk_length_s: 20, stride_length_s: 4, task: "transcribe" };
-      if (language !== "auto") recognitionOptions.language = language;
-      const output = await recognizer(
-        { raw: input.raw, sampling_rate: input.sampling_rate },
-        recognitionOptions
-      );
-      const chunks = Array.isArray(output.chunks) ? output.chunks : [];
-      const segments = chunks.map(chunk => {
-        const timestamp = chunk.timestamp || [];
-        const relativeStart = Number(timestamp[0]);
-        const relativeEnd = Number(timestamp[1]);
-        return {
-          start: start + (Number.isFinite(relativeStart) ? relativeStart : 0),
-          end: start + (Number.isFinite(relativeEnd) && relativeEnd > relativeStart
-            ? relativeEnd : Math.min(input.duration, (Number.isFinite(relativeStart) ? relativeStart : 0) + 2.5)),
-          text: String(chunk.text || "").trim()
-        };
-      }).filter(segment => segment.text && segment.end > segment.start);
-      if (!segments.length && String(output.text || "").trim()) {
-        segments.push({start, end: Math.min(end, start + 3), text: String(output.text).trim()});
+      const trackEnd = track.end;
+      const segments = [];
+      const chunkDuration = 180;
+      const totalChunks = Math.max(1, Math.ceil((trackEnd - start) / chunkDuration));
+      for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+        const chunkStart = start + chunkIndex * chunkDuration;
+        const chunkEnd = Math.min(trackEnd, chunkStart + chunkDuration);
+        const input = makeMonoAudioInput(track.buffer, chunkStart, chunkEnd);
+        if (!input.raw.length) continue;
+        status("AI文字起こし中：" + track.name + "（素材 " + (done + 1) + "/" + targets.length + "・区間 " + (chunkIndex + 1) + "/" + totalChunks + "）");
+        const recognitionOptions = { return_timestamps: true, chunk_length_s: 20, stride_length_s: 4, task: "transcribe" };
+        if (language !== "auto") recognitionOptions.language = language;
+        const output = await recognizer(
+          { raw: input.raw, sampling_rate: input.sampling_rate },
+          recognitionOptions
+        );
+        const chunks = Array.isArray(output.chunks) ? output.chunks : [];
+        const chunkSegments = chunks.map(chunk => {
+          const timestamp = chunk.timestamp || [];
+          const relativeStart = Number(timestamp[0]);
+          const relativeEnd = Number(timestamp[1]);
+          const safeRelativeStart = Number.isFinite(relativeStart) ? relativeStart : 0;
+          const safeRelativeEnd = Number.isFinite(relativeEnd) && relativeEnd > safeRelativeStart
+            ? relativeEnd : Math.min(input.duration, safeRelativeStart + 2.5);
+          return {
+            start: chunkStart + safeRelativeStart,
+            end: Math.min(chunkEnd, chunkStart + safeRelativeEnd),
+            text: String(chunk.text || "").trim()
+          };
+        }).filter(segment => segment.text && segment.end > segment.start);
+        if (!chunkSegments.length && String(output.text || "").trim()) {
+          chunkSegments.push({start: chunkStart, end: Math.min(chunkEnd, chunkStart + 3), text: String(output.text).trim()});
+        }
+        segments.push(...chunkSegments);
       }
       speechSegmentsByTrackId.set(track.id, segments);
       report.push(track.name + "\n" + (segments.length
