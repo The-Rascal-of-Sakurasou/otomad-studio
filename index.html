@@ -396,6 +396,158 @@ a{overflow-wrap:anywhere}
  .toolbar button{min-height:44px}input[type=number],select{min-height:44px}
  .field label{font-size:13px}.muted,.section-intro{font-size:13px}
 }
+
+/* UX revision inspired by established browser editors: BandLab, CapCut and Canva.
+   Apply their general patterns (clear workflow, visible timeline, progressive disclosure),
+   without copying their branding or exact interface. */
+:root{
+  --bg:#f4f6fb;
+  --panel:#ffffff;
+  --panel2:#f7f8fc;
+  --border:#d8deeb;
+  --accent:#5548d9;
+  --text:#202943;
+  --muted:#68738a;
+  --jp-focus:#a5b4fc;
+}
+body{background:var(--bg);color:var(--text)}
+header{
+  padding:18px clamp(16px,3vw,36px) 16px;
+  border-bottom:1px solid #e0e5f0;
+  background:#fff;
+}
+.brand{font-size:clamp(21px,2.3vw,28px);font-weight:800;letter-spacing:-.025em}
+.subtitle{font-size:13px;color:#64708a}
+.quick-nav{
+  position:sticky;top:0;z-index:20;
+  display:flex;align-items:center;gap:5px;
+  padding:8px clamp(12px,3vw,36px);
+  overflow-x:auto;overscroll-behavior-x:contain;
+  background:rgba(255,255,255,.96);
+  border-bottom:1px solid #dce2ed;
+  box-shadow:0 3px 12px rgba(27,39,76,.055);
+  backdrop-filter:blur(12px);
+}
+.quick-nav a{
+  display:inline-flex;align-items:center;justify-content:center;
+  min-height:38px;padding:7px 12px;border:1px solid transparent;
+  border-radius:8px;color:#4d5873;text-decoration:none;
+  font-size:12px;font-weight:700;white-space:nowrap;
+}
+.quick-nav a:hover,.quick-nav a:focus-visible{
+  color:#3730a3;background:#f0efff;border-color:#dedbff;
+}
+main{max-width:1560px;padding:18px clamp(12px,2vw,28px) 40px}
+.panel{
+  border:1px solid #e0e5ef;border-radius:14px;
+  box-shadow:0 4px 16px rgba(28,39,76,.045);
+  background:var(--panel);
+}
+.panel h2{font-size:17px;letter-spacing:-.01em}
+#gettingStartedPanel{
+  border-color:#dcdafa;
+  background:linear-gradient(120deg,#fff 0%,#fbfaff 65%,#f5fbfa 100%);
+}
+#gettingStartedPanel .step-guide{gap:10px}
+.step-guide a{
+  position:relative;display:flex;flex-direction:column;gap:5px;
+  padding:13px 12px;border:1px solid #e0e3ef;border-radius:11px;
+  background:#fff;color:#58647d;text-decoration:none;
+  box-shadow:0 2px 6px rgba(30,41,80,.025);
+}
+.step-guide a strong{color:#252d48;font-size:13px}
+.step-guide a:hover,.step-guide a:focus-visible{
+  border-color:#a7a0f2;background:#f7f6ff;transform:translateY(-1px);
+}
+#projectPanel .toolbar{
+  display:flex;align-items:center;gap:8px;
+  padding:12px;background:#f7f8fc;border:1px solid #e2e6f0;border-radius:12px;
+}
+#projectPanel .toolbar button{min-height:40px}
+#projectPanel #importBtn{
+  background:#5145d9;color:#fff;border-color:#5145d9;font-weight:750;
+}
+#projectPanel #importBtn:hover{background:#4338ca}
+#projectPanel #playBtn{background:#087f68;color:#fff;border-color:#087f68}
+#projectPanel #exportBtn{background:#1e293b;color:#fff;border-color:#1e293b}
+#projectPanel #exportBtn:disabled,#projectPanel #playBtn:disabled{opacity:.42}
+#projectPanel #clearBtn{margin-left:auto}
+#imageAssetsPanel{box-shadow:none;background:#fbfcff}
+#status{border-radius:10px;background:#f1f5ff;border-color:#dce4fa;border-left-color:#5548d9}
+.layout{align-items:start}
+#timelinePanel{border-color:#d5daf0}
+.timeline-box{
+  padding:12px;background:#171b2b;border:1px solid #30364c;border-radius:12px;
+}
+#timeline{display:block;width:100%;max-width:100%;border-radius:6px}
+.timeline-tools{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  padding-top:10px;
+}
+.timeline-tools .stat{margin-left:auto}
+#trackList{display:grid;gap:10px}
+#trackList .track{
+  border:1px solid #e0e5ef;border-radius:12px;
+  box-shadow:0 2px 8px rgba(27,39,76,.025);
+}
+#trackList .track.is-selected{border-color:#8d85ec;box-shadow:0 0 0 2px #eeecff}
+.controls .field,.effects .field,.bulk-controls .field{
+  background:#f8f9fd;border-color:#e4e8f1;
+}
+#masterPanel{border-top:3px solid #087f68}
+#bpmPanel{border-top:3px solid #5548d9}
+#assistantPanel{border-top:3px solid #7c3aed}
+#assistantPanel .primary-action-box{
+  background:#f7f6ff;border-color:#d9d4ff;
+}
+#assistantPanel #autoGenerateBtn,.primary{
+  min-height:44px;background:#5145d9;color:#fff;border-color:#5145d9;
+  font-weight:750;box-shadow:0 3px 8px rgba(81,69,217,.15);
+}
+#assistantPanel #autoGenerateBtn:hover,.primary:hover{background:#4338ca}
+button{transition:background-color .12s,border-color .12s,box-shadow .12s}
+button:hover:not(:disabled){box-shadow:0 2px 7px rgba(27,39,76,.10)}
+button:disabled{cursor:not-allowed;opacity:.5}
+input,select,textarea{border-color:#cfd6e5}
+input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible,a:focus-visible{
+  outline:3px solid var(--jp-focus);outline-offset:2px;
+}
+.help-box{background:#f5f6ff;border-left-color:#8175e8;color:#4d5873}
+.advanced-tools{background:#f8f9fd}
+details>summary{cursor:pointer;font-weight:700;color:#3d4964}
+footer{color:#7a8498}
+@media(min-width:1100px){
+  .layout{grid-template-columns:minmax(0,1fr) 350px;gap:18px}
+  #timelinePanel{position:relative}
+}
+@media(max-width:800px){
+  .quick-nav{padding:7px 10px}
+  .quick-nav a{min-height:40px;padding:7px 10px}
+  .step-guide{grid-template-columns:repeat(2,minmax(0,1fr))}
+  #projectPanel .toolbar #clearBtn{margin-left:0}
+}
+@media(max-width:600px){
+  main{padding:12px 10px 28px}
+  .panel{padding:14px;margin-bottom:12px;border-radius:12px}
+  header{padding:15px 13px 13px}
+  .subtitle{font-size:12px}
+  .quick-nav{gap:4px}
+  .quick-nav a{font-size:12px}
+  .step-guide{grid-template-columns:1fr;gap:7px}
+  .step-guide a{padding:11px 12px}
+  #projectPanel .toolbar{gap:7px}
+  #projectPanel .toolbar button{flex:1 1 calc(50% - 7px);min-width:0}
+  #projectPanel #clearBtn{flex:1 1 100%}
+  .timeline-box{padding:6px}
+  #timeline{height:auto}
+  .timeline-tools .stat{width:100%;margin-left:0}
+  .row{flex-wrap:wrap}
+  .row>*{min-width:0}
+}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{scroll-behavior:auto!important;transition:none!important}
+}
+
 </style>
 </head>
 <body>
