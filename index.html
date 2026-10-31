@@ -1623,7 +1623,7 @@ function drawTimeline() {
   const height = canvas.height;
 
   ctx.clearRect(0, 0, width, height);
-  ctx.fillStyle = "#14141b";
+  ctx.fillStyle = "#f7f8fc";
   ctx.fillRect(0, 0, width, height);
 
   const totalDuration = Math.max(getMixDuration(), 10);
@@ -1634,8 +1634,8 @@ function drawTimeline() {
   const scale = usable / duration;
 
   ctx.font = "12px system-ui";
-  ctx.fillStyle = "#a1a1aa";
-  ctx.strokeStyle = "#343441";
+  ctx.fillStyle = "#59647e";
+  ctx.strokeStyle = "#d8deea";
 
   // BPMに合わせた拍グリッド。4拍ごとの小節線を強調する。
   const bpm = clamp(Number(bpmInput.value) || 120, 40, 240);
@@ -1648,7 +1648,7 @@ function drawTimeline() {
     const x = left + sec * scale;
     if (x > right) break;
     const isBar = Math.abs(sec / (beatSeconds * 4) - Math.round(sec / (beatSeconds * 4))) < 0.001;
-    ctx.strokeStyle = isBar ? "#45455a" : "#292936";
+    ctx.strokeStyle = isBar ? "#aab4cc" : "#e0e5ef";
     ctx.lineWidth = isBar ? 1.4 : 1;
     ctx.beginPath();
     ctx.moveTo(x, 8);
@@ -1672,10 +1672,10 @@ function drawTimeline() {
     const x = left + track.position * scale;
     const w = getTrackOutputDuration(track) * scale;
 
-    ctx.fillStyle = track.muted ? "#555560" : "#8b75d8";
+    ctx.fillStyle = track.muted ? "#aab2c2" : "#818cf8";
     ctx.fillRect(x, y, Math.max(2, Math.min(w, right - x)), barHeight);
 
-    ctx.fillStyle = "#f4f4f8";
+    ctx.fillStyle = "#26304a";
     ctx.fillText(
       (i + 1) + ". " + track.name.slice(0, 24),
       5, y + barHeight - 1
@@ -1704,13 +1704,13 @@ function drawTimeline() {
     const elapsed = playbackOffset + (performance.now() - playbackStartedAt) / 1000;
     const x = left + elapsed * scale;
     if (elapsed <= playbackDuration && x >= left && x <= right) {
-      ctx.strokeStyle = "#6ee7b7";
+      ctx.strokeStyle = "#0f766e";
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(x, 7);
       ctx.lineTo(x, height - 7);
       ctx.stroke();
-      ctx.fillStyle = "#6ee7b7";
+      ctx.fillStyle = "#0f766e";
       ctx.fillText(elapsed.toFixed(2) + "s", Math.min(x + 4, right - 42), 10);
     }
   }
