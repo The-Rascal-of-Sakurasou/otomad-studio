@@ -522,7 +522,7 @@ input[type="range"]{accent-color:var(--accent)}
             <option value="phrase">句読点・フレーズで分割</option>
             <option value="fine">細かく刻む（文字数から時間を概算）</option>
           </select>
-          <p class="muted">文字起こしの開始・終了時刻を使います。細かく刻む場合、単語ごとの正確な時刻情報がないため、文字数に応じた概算位置になります。音声を聴いて調整してください。</p>
+          <p class="muted">文字起こしの開始・終了時刻と文字数から分割位置を推定し、近くの音量が低い位置へ境界を寄せます。単語ごとの正確な認識時刻ではないため、生成後に音声を聴いて確認してください。</p>
         </div>
         <div class="field generation-limit-field">
           <label for="generationRepeat">セリフ・音の反復</label>
@@ -3265,7 +3265,40 @@ document.querySelectorAll(".prompt-preset").forEach(button => {
 });
 
 // 文字起こしの時間区間を、句読点や文字数に応じて分割する補助処理。
-// Whisperの区間時刻からの概算であり、単語単位の強制アラインメントではない。
+// 内部境界は短時間の音量（RMS）を調べ、近傍の音量が低い位置へ寄せる。
+// これは音声の強制アラインメントではなく、発音時刻の推定を補助する処理。
+function findLowEnergyBoundary(buffer, targetTime, minTime, maxTime) {
+  const frameSeconds = 0.01;
+  const radiusSeconds = 0.12;
+  const frameSize = Math.max(1, Math.floor(buffer.sampleRate * frameSeconds));
+  const channels = Array.from({ length: buffer.numberOfChannels }, (_, i) => buffer.getChannelData(i));
+  const from = Math.max(minTime, targetTime - radiusSeconds);
+  const to = Math.min(maxTime, targetTime + radiusSeconds);
+  if (to <= from) return clamp(targetTime, minTime, maxTime);
+  let bestTime = clamp(targetTime, from, to);
+  let bestEnergy = Infinity;
+  for (let time = from; time <= to; time += frameSeconds) {
+    const begin = Math.max(0, Math.min(buffer.length - 1, Math.floor(time * buffer.sampleRate)));
+    const finish = Math.min(buffer.length, begin + frameSize);
+    let sumSquares = 0;
+    let count = 0;
+    for (const channel of channels) {
+      for (let i = begin; i < finish; i += 2) {
+        const sample = channel[i] || 0;
+        sumSquares += sample * sample;
+        count++;
+      }
+    }
+    const rms = count ? Math.sqrt(sumSquares / count) : 0;
+    const score = rms + Math.abs(time - targetTime) * 0.015;
+    if (score < bestEnergy) {
+      bestEnergy = score;
+      bestTime = time;
+    }
+  }
+  return clamp(bestTime, minTime, maxTime);
+}
+
 function splitTranscriptSegment(segment, mode, source) {
   const text = String(segment.text || "").trim();
   const start = clamp(Number(segment.start) || 0, source.startTrim, source.end - 0.03);
@@ -3300,25 +3333,30 @@ function splitTranscriptSegment(segment, mode, source) {
       return [{ time: start, speechEnd: end, transcript: text, strength: 0.75 }];
     }
   }
-  // Allocate duration proportional to character count so longer phrases receive more time.
+  // 文字数に比例して境界を推定し、近傍の音量が低い位置へスナップする。
   const weights = parts.map(part => Math.max(1, Array.from(part).length));
   const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
   const duration = end - start;
-  let cursor = start;
-  return parts.map((part, index) => {
-    const pieceStart = cursor;
-    cursor = index === parts.length - 1
-      ? end
-      : cursor + duration * weights[index] / totalWeight;
-    return {
-      time: pieceStart,
-      speechEnd: cursor,
-      transcript: part,
-      strength: 0.75,
-      splitIndex: index,
-      splitCount: parts.length
-    };
-  }).filter(item => item.speechEnd - item.time >= 0.045);
+  const minPieceDuration = Math.min(0.07, duration / (parts.length * 1.5));
+  const boundaries = [start];
+  let cumulativeWeight = 0;
+  for (let index = 0; index < parts.length - 1; index++) {
+    cumulativeWeight += weights[index];
+    const estimated = start + duration * cumulativeWeight / totalWeight;
+    const lowerBound = Math.max(boundaries[boundaries.length - 1] + minPieceDuration,
+      start + duration * (index + 1) * 0.35 / parts.length);
+    const upperBound = end - minPieceDuration * (parts.length - index - 1);
+    boundaries.push(findLowEnergyBoundary(source.buffer, estimated, lowerBound, upperBound));
+  }
+  boundaries.push(end);
+  return parts.map((part, index) => ({
+    time: boundaries[index],
+    speechEnd: boundaries[index + 1],
+    transcript: part,
+    strength: 0.75,
+    splitIndex: index,
+    splitCount: parts.length
+  })).filter(item => item.speechEnd - item.time >= 0.045);
 }
 
 // ローカル自動構成生成：プロンプト設定を拍同期・クリップ配置に反映する。
