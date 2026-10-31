@@ -429,6 +429,7 @@ a{overflow-wrap:anywhere}
       <button id="playBtn" class="green" disabled title="読み込んだ素材を重ねて再生します">▶ 再生して確認</button>
       <button id="stopBtn" class="secondary" disabled>■ 停止</button>
       <button id="exportBtn" disabled title="編集結果を音声ファイルとして保存します">完成音声を保存（WAV）</button>
+      <button id="exportCompressedBtn" class="secondary" disabled title="対応ブラウザでは圧縮音声として保存します。WAVより小さくなりますが、再生時間と同程度の時間がかかります">圧縮音声を保存（WebM/Opus）</button>
       <button id="preflightBtn" class="secondary" disabled title="書き出し前に音量ピーク、クリップ、長さを検査します">書き出し前チェック</button>
       <button id="preflightCopyBtn" class="secondary" disabled title="直近のチェック結果をテキストとしてコピーします">検査結果をコピー</button>
       <button id="saveProjectBtn" class="secondary" title="配置や音量などの設定をJSONファイルに保存します。音声本体は保存されません">編集設定を保存（JSON）</button>
@@ -979,6 +980,7 @@ function updateButtons() {
   $("repeatTrackBtn").disabled = busy || !hasTracks;
   playBtn.disabled = busy || !hasTracks;
   exportBtn.disabled = busy || !hasTracks;
+  if ($("exportCompressedBtn")) $("exportCompressedBtn").disabled = busy || !hasTracks || !window.MediaRecorder;
   if ($("preflightBtn")) $("preflightBtn").disabled = busy || !hasTracks;
   if ($("preflightCopyBtn")) $("preflightCopyBtn").disabled = busy || !lastPreflightReport;
   $("detectBpmBtn").disabled = busy || !hasTracks;
@@ -2503,6 +2505,63 @@ $("stopBtn").addEventListener("click", () => {
   status("再生を停止しました。");
 });
 
+async function encodeCompressedAudio(buffer, onProgress = () => {}) {
+  if (!window.MediaRecorder) throw new Error("このブラウザは圧縮音声の書き出しに対応していません。WAVをご利用ください。");
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) throw new Error("このブラウザでは音声処理を開始できません。");
+  const mimeType = [
+    "audio/webm;codecs=opus",
+    "audio/ogg;codecs=opus",
+    "audio/mp4"
+  ].find(type => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(type));
+  if (!mimeType) throw new Error("このブラウザで利用できる圧縮音声形式が見つかりません。WAVをご利用ください。");
+
+  const context = new AudioContextClass({ sampleRate: buffer.sampleRate });
+  let recorder = null;
+  let source = null;
+  let timer = null;
+  try {
+    if (context.state === "suspended") await context.resume();
+    const destination = context.createMediaStreamDestination();
+    source = context.createBufferSource();
+    source.buffer = buffer;
+    source.connect(destination);
+    const chunks = [];
+    recorder = new MediaRecorder(destination.stream, { mimeType });
+    const recorded = new Promise((resolve, reject) => {
+      recorder.ondataavailable = event => {
+        if (event.data && event.data.size) chunks.push(event.data);
+      };
+      recorder.onerror = () => reject(new Error("圧縮音声の記録に失敗しました。WAVでの保存をお試しください。"));
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: mimeType });
+        if (!blob.size) reject(new Error("圧縮音声データが空です。WAVでの保存をお試しください。"));
+        else resolve(blob);
+      };
+      source.onended = () => {
+        if (recorder && recorder.state !== "inactive") recorder.stop();
+      };
+    });
+    recorder.start(250);
+    const startedAt = performance.now();
+    timer = setInterval(() => {
+      const elapsed = (performance.now() - startedAt) / 1000;
+      onProgress(Math.min(99, Math.round(elapsed / Math.max(0.1, buffer.duration) * 100)));
+    }, 500);
+    source.start();
+    const blob = await recorded;
+    onProgress(100);
+    return { blob, mimeType };
+  } finally {
+    if (timer) clearInterval(timer);
+    try { if (source) source.disconnect(); } catch (_) {}
+    try {
+      if (recorder && recorder.state !== "inactive") recorder.stop();
+    } catch (_) {}
+    try { await context.close(); } catch (_) {}
+  }
+}
+
 async function encodeWav(buffer, onProgress = () => {}) {
   const channels = 2;
   const bytesPerSample = 2;
@@ -2618,6 +2677,64 @@ $("preflightBtn").addEventListener("click", async () => {
   } catch (error) {
     console.error(error);
     status(error && error.message ? "チェックできませんでした：" + error.message : "書き出し前チェックに失敗しました。素材の長さやメモリ使用量を確認してください。");
+  } finally {
+    setBusy(false);
+  }
+});
+
+$("exportCompressedBtn").addEventListener("click", async () => {
+  if (busy || !tracks.length) return;
+  if (!window.MediaRecorder) {
+    status("このブラウザは圧縮音声の書き出しに対応していません。WAVをご利用ください。");
+    return;
+  }
+  stopPlayback();
+  setBusy(true);
+  status("ミックスをレンダリングしています…");
+  try {
+    const buffer = await renderMix();
+    if ($("preventClipping").checked) {
+      let peak = 0;
+      const chunkSize = 262144;
+      for (let channelIndex = 0; channelIndex < buffer.numberOfChannels; channelIndex++) {
+        const channel = buffer.getChannelData(channelIndex);
+        for (let start = 0; start < channel.length; start += chunkSize) {
+          const end = Math.min(channel.length, start + chunkSize);
+          for (let i = start; i < end; i++) peak = Math.max(peak, Math.abs(channel[i]));
+          if (end < channel.length) await new Promise(resolve => setTimeout(resolve, 0));
+        }
+      }
+      const targetPeak = Math.pow(10, -1 / 20);
+      if (peak > targetPeak) {
+        const gain = targetPeak / peak;
+        for (let channelIndex = 0; channelIndex < buffer.numberOfChannels; channelIndex++) {
+          const channel = buffer.getChannelData(channelIndex);
+          for (let start = 0; start < channel.length; start += chunkSize) {
+            const end = Math.min(channel.length, start + chunkSize);
+            for (let i = start; i < end; i++) channel[i] *= gain;
+            if (end < channel.length) await new Promise(resolve => setTimeout(resolve, 0));
+          }
+        }
+      }
+    }
+    status("圧縮音声を作成しています。再生時間と同程度の時間がかかる場合があります…");
+    const result = await encodeCompressedAudio(buffer, percent => {
+      status("圧縮音声を作成しています… " + percent + "%");
+    });
+    const extension = result.mimeType.includes("ogg") ? "ogg"
+      : result.mimeType.includes("mp4") ? "m4a" : "webm";
+    const url = URL.createObjectURL(result.blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "otomad-studio-mix." + extension;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+    status("圧縮音声を書き出しました（" + extension.toUpperCase() + "）。音質を重視する場合はWAVをご利用ください。");
+  } catch (error) {
+    console.error("圧縮音声の書き出しエラー:", error);
+    status(error && error.message ? error.message : "圧縮音声の書き出しに失敗しました。WAVをご利用ください。");
   } finally {
     setBusy(false);
   }
