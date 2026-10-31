@@ -516,6 +516,16 @@ input[type="range"]{accent-color:var(--accent)}
           <div class="toolbar"><button id="clearPromptBtn" class="secondary" type="button">プロンプトを消去</button><button id="applyPromptBtn" class="secondary" type="button">指示を設定に反映</button></div>
         </div>
         <div class="field generation-limit-field">
+          <label for="generationRepeat">セリフ・音の反復</label>
+          <select id="generationRepeat">
+            <option value="0">反復しない</option>
+            <option value="1" selected>軽く反復（1回追加）</option>
+            <option value="2">強めに反復（2回追加）</option>
+            <option value="3">連打（3回追加）</option>
+          </select>
+          <p class="muted">自動生成したクリップの短い冒頭を繰り返して配置します。プロンプトに「反復しない」「連打」などと書いた場合は、指示を優先します。</p>
+        </div>
+        <div class="field generation-limit-field">
           <label for="generationClipLimit">生成するクリップ数の上限</label>
           <select id="generationClipLimit"><option value="16">16（軽め）</option><option value="32">32（標準）</option><option value="48" selected>48（多め）</option><option value="64">64（高密度）</option><option value="80">80（最大）</option></select>
           <p class="muted">素材数や音の検出状況によって実際の生成数は上限より少なくなります。最初は16〜32で試すと確認しやすくなります。</p>
@@ -3148,7 +3158,7 @@ $("copyTranscriptBtn").addEventListener("click", async () => {
 // プロンプトはブラウザ内で解釈できる設定語に変換する。外部AI APIは使用しない。
 function parseGenerationPrompt(rawPrompt) {
   const prompt = String(rawPrompt || "").trim().toLowerCase();
-  const profile = { goal: null, bpm: null, division: null, density: null, pitchShift: 0, panMode: null, notes: [] };
+  const profile = { goal: null, bpm: null, division: null, density: null, pitchShift: 0, panMode: null, repeatCount: null, notes: [] };
   if (!prompt) return profile;
   if (/カオス|カオス系|高速|速い|ハイスピード|chaos/.test(prompt)) {
     profile.goal = "chaos"; profile.notes.push("カオス系");
@@ -3180,6 +3190,13 @@ function parseGenerationPrompt(rawPrompt) {
   }
   if (/細かく|高密度|大量|連打|ぎっしり/.test(prompt)) profile.density = "high";
   if (/ゆっくり|余裕|少なめ|間を空け/.test(prompt)) profile.density = "low";
+  if (/反復しない|繰り返さない|ループなし/.test(prompt)) {
+    profile.repeatCount = 0; profile.notes.push("反復なし");
+  } else if (/連打|大量(?:に)?(?:反復|ループ)|(?:強く|強めに)(?:反復|繰り返し|ループ)/.test(prompt)) {
+    profile.repeatCount = 3; profile.notes.push("連打・強い反復");
+  } else if (/(?:軽く|少し)(?:反復|繰り返し|ループ)|反復|繰り返し|ループ/.test(prompt)) {
+    profile.repeatCount = 1; profile.notes.push("軽い反復");
+  }
   if (/高音|高く|ピッチアップ/.test(prompt)) { profile.pitchShift = 5; profile.notes.push("高めの音程"); }
   if (/低音|低く|ピッチダウン/.test(prompt)) { profile.pitchShift = -5; profile.notes.push("低めの音程"); }
   if (/左右交互|左右に広げ|パンを交互|ステレオ感/.test(prompt)) {
@@ -3334,6 +3351,38 @@ $("autoGenerateBtn").addEventListener("click", () => {
     return;
   }
 
+  // 短い冒頭を追加配置し、音MADで使う反復・連打を作る。元の生成クリップは維持する。
+  const repeatCount = profile.repeatCount === null
+    ? clamp(Number($("generationRepeat").value) || 0, 0, 3)
+    : clamp(profile.repeatCount, 0, 3);
+  let repeatedCount = 0;
+  if (repeatCount > 0 && generated.length < maxClips) {
+    const originals = generated.slice();
+    for (const original of originals) {
+      if (generated.length >= maxClips) break;
+      // セリフ認識結果がある場合はセリフを優先。なければ選んだ方向性のクリップを反復。
+      if (goal === "voice" && original.group !== "AIセリフ抽出") continue;
+      const originalLength = original.end - original.startTrim;
+      if (originalLength < 0.09) continue;
+      const sliceLength = Math.min(originalLength, Math.max(0.07, Math.min(0.22, beat * 0.42)));
+      for (let repeat = 1; repeat <= repeatCount && generated.length < maxClips; repeat++) {
+        generated.push({
+          ...original,
+          id: makeId(),
+          name: "反復 " + String(repeatedCount + 1).padStart(2, "0") + " · " + original.name,
+          position: original.position + sliceLength * repeat,
+          end: original.startTrim + sliceLength,
+          volume: clamp(original.volume * (repeat === 1 ? 0.88 : 0.72), 0.05, 2),
+          pitch: clamp(original.pitch + (repeat % 2 === 0 ? 2 : -1), -24, 24),
+          fadeIn: 0,
+          fadeOut: Math.min(0.025, sliceLength * 0.12),
+          group: "自動反復"
+        });
+        repeatedCount++;
+      }
+    }
+  }
+
   recordHistory();
   stopPlayback();
   sources.forEach(source => { source.muted = true; });
@@ -3344,7 +3393,7 @@ $("autoGenerateBtn").addEventListener("click", () => {
   renderTracks();
   drawTimeline();
   updateButtons();
-  status("プロンプト生成：" + generated.length + "クリップ（上限 " + maxClips + "）、BPM " + bpm +
+  status("プロンプト生成：" + generated.length + "クリップ（上限 " + maxClips + "、反復 " + repeatedCount + "個）、BPM " + bpm +
     "、配置間隔 " + interval.toFixed(3) + "秒" +
     (profile.notes.length ? "。反映：" + profile.notes.join("、") : "。方向性：" + $("aiGoal").selectedOptions[0].textContent) +
     "。"+ (goal === "voice" && buckets.some(bucket => bucket.usedTranscript) ? "AI文字起こしの時間情報を使ってセリフを配置しました。" : "") + "元素材はミュートして保持しています。再生して確認し、Ctrl+Zで全体を取り消せます。");
