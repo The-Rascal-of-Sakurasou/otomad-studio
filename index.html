@@ -2399,11 +2399,14 @@ $("stopBtn").addEventListener("click", () => {
   status("再生を停止しました。");
 });
 
-function encodeWav(buffer) {
+async function encodeWav(buffer, onProgress = () => {}) {
   const channels = 2;
   const bytesPerSample = 2;
   const frames = buffer.length;
   const dataSize = frames * channels * bytesPerSample;
+  if (dataSize + 44 > 0xffffffff) {
+    throw new Error("WAVのサイズ上限を超えています。素材を短くするか、サンプルレートを下げてください。");
+  }
   const arrayBuffer = new ArrayBuffer(44 + dataSize);
   const view = new DataView(arrayBuffer);
 
@@ -2428,23 +2431,22 @@ function encodeWav(buffer) {
   view.setUint32(40, dataSize, true);
 
   const left = buffer.getChannelData(0);
-  const right = buffer.numberOfChannels > 1
-    ? buffer.getChannelData(1) : left;
-
+  const right = buffer.numberOfChannels > 1 ? buffer.getChannelData(1) : left;
+  const chunkFrames = 131072;
   let offset = 44;
 
-  for (let i = 0; i < frames; i++) {
-    for (const channel of [left, right]) {
-      const sample = clamp(channel[i], -1, 1);
-      view.setInt16(
-        offset,
-        sample < 0 ? sample * 32768 : sample * 32767,
-        true
-      );
-      offset += 2;
+  for (let start = 0; start < frames; start += chunkFrames) {
+    const end = Math.min(frames, start + chunkFrames);
+    for (let i = start; i < end; i++) {
+      for (const channel of [left, right]) {
+        const sample = clamp(channel[i], -1, 1);
+        view.setInt16(offset, sample < 0 ? sample * 32768 : sample * 32767, true);
+        offset += 2;
+      }
     }
+    onProgress(Math.round(end / frames * 100));
+    if (end < frames) await new Promise(resolve => setTimeout(resolve, 0));
   }
-
   return arrayBuffer;
 }
 
@@ -2453,37 +2455,46 @@ exportBtn.addEventListener("click", async () => {
 
   stopPlayback();
   setBusy(true);
-  status("WAVを書き出しています…");
+  status("ミックスをレンダリングしています…");
 
   try {
     const buffer = await renderMix();
     let exportNote = "";
     if ($("preventClipping").checked) {
       let peak = 0;
+      const chunkSize = 262144;
       for (let channelIndex = 0; channelIndex < buffer.numberOfChannels; channelIndex++) {
         const channel = buffer.getChannelData(channelIndex);
-        for (let i = 0; i < channel.length; i++) peak = Math.max(peak, Math.abs(channel[i]));
+        for (let start = 0; start < channel.length; start += chunkSize) {
+          const end = Math.min(channel.length, start + chunkSize);
+          for (let i = start; i < end; i++) peak = Math.max(peak, Math.abs(channel[i]));
+          if (end < channel.length) await new Promise(resolve => setTimeout(resolve, 0));
+        }
       }
       const targetPeak = Math.pow(10, -1 / 20); // -1 dBFS
       if (peak > targetPeak) {
         const gain = targetPeak / peak;
         for (let channelIndex = 0; channelIndex < buffer.numberOfChannels; channelIndex++) {
           const channel = buffer.getChannelData(channelIndex);
-          for (let i = 0; i < channel.length; i++) channel[i] *= gain;
+          for (let start = 0; start < channel.length; start += chunkSize) {
+            const end = Math.min(channel.length, start + chunkSize);
+            for (let i = start; i < end; i++) channel[i] *= gain;
+            status("音割れ防止を適用しています… " + Math.round(end / channel.length * 100) + "%");
+            if (end < channel.length) await new Promise(resolve => setTimeout(resolve, 0));
+          }
         }
         exportNote = " 音割れ防止のため全体音量を " + (20 * Math.log10(gain)).toFixed(1) + " dB調整しました。";
       }
     }
-    const wav = encodeWav(buffer);
-    const url = URL.createObjectURL(
-      new Blob([wav], { type: "audio/wav" })
-    );
-
+    status("WAVデータを作成しています…");
+    const wav = await encodeWav(buffer, percent => status("WAVデータを作成しています… " + percent + "%"));
+    const url = URL.createObjectURL(new Blob([wav], { type: "audio/wav" }));
     const link = document.createElement("a");
     link.href = url;
     link.download = "otomad-studio-mix.wav";
+    document.body.appendChild(link);
     link.click();
-
+    link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 30000);
     status("WAVファイルを書き出しました。" + exportNote);
   } catch (error) {
@@ -2494,7 +2505,9 @@ exportBtn.addEventListener("click", async () => {
         ? "書き出せませんでした。素材の配置を確認し、ミックス全体を5分以内にしてください。"
         : message.includes("メモリ")
           ? "メモリが不足しています。素材を短くするか、サンプルレートを下げて再度お試しください。"
-          : "WAVの書き出しに失敗しました。素材の長さを短くし、不要なタブを閉じてから再度お試しください。"
+          : message.includes("上限")
+            ? message
+            : "WAVの書き出しに失敗しました。素材の長さを短くし、不要なタブを閉じてから再度お試しください。"
     );
   } finally {
     setBusy(false);
