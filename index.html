@@ -3637,6 +3637,8 @@ $("autoGenerateBtn").addEventListener("click", () => {
 
   recordHistory();
   stopPlayback();
+  // 元トラックのSoloが残っていると生成トラックが無音になるため、生成後はSolo状態を解除する。
+  tracks.forEach(track => { track.solo = false; });
   sources.forEach(source => { source.muted = true; });
   tracks.push(...generated);
   selectedTrackIds.clear();
@@ -3648,7 +3650,10 @@ $("autoGenerateBtn").addEventListener("click", () => {
   status("プロンプト生成：" + generated.length + "クリップ（上限 " + maxClips + "、反復 " + repeatedCount + "個）、BPM " + bpm +
     "、配置間隔 " + interval.toFixed(3) + "秒" +
     (profile.notes.length ? "。反映：" + profile.notes.join("、") : "。方向性：" + $("aiGoal").selectedOptions[0].textContent) +
-    "。"+ (goal === "voice" && buckets.some(bucket => bucket.usedTranscript) ? "文字起こしの時間情報を使ってセリフを配置しました（分割：" + (profile.speechSplit || $("generationSpeechSplit").value || "natural") + "）。" : "") + "元素材はミュートして保持しています。再生して確認し、Ctrl+Zで全体を取り消せます。");
+    "。"+ (goal === "voice" && buckets.some(bucket => bucket.usedTranscript)
+      ? "文字起こしの時間情報を使ってセリフを配置しました（分割：" + (profile.speechSplit || $("generationSpeechSplit").value || "natural") + "）。"
+      : goal === "voice" ? "文字起こし結果がないため、音の立ち上がりを代用しています。セリフ中心にする場合は先にAI文字起こしを実行してください。" : "") +
+    "元素材はミュートして保持しています。再生して確認し、Ctrl+Zで全体を取り消せます。");
 });
 
 $("trimSilenceBtn").addEventListener("click", () => {
