@@ -256,6 +256,15 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   *,*::before,*::after{transition:none!important;animation:none!important}
 }
 
+/* Practical prompt presets and generation limits */
+.prompt-presets{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:10px 0}
+.prompt-presets .preset-label{width:100%;font-size:12px}
+.prompt-presets button{min-height:38px;padding:7px 12px}
+.generation-limit-field{margin:12px 0;padding:12px;border:1px solid var(--border);border-radius:10px;background:var(--panel)}
+.generation-limit-field select{width:100%;min-height:42px}
+.generation-limit-field p{margin-bottom:0}
+@media(max-width:600px){.prompt-presets button{flex:1 1 calc(50% - 8px)}}
+
 /* AI transcription settings */
 .ai-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:12px 0 6px}
 .ai-options .field{min-width:0}
@@ -496,8 +505,20 @@ input[type="range"]{accent-color:var(--accent)}
         <div class="field" style="margin-top:10px">
           <label for="generationPrompt">作りたい音MADの指示（文章で入力）</label>
           <textarea id="generationPrompt" rows="3" maxlength="500" placeholder="例：BPM 150で、セリフ中心。細かく刻んでテンポの速いカオス系にする"></textarea>
+          <div class="prompt-presets" role="group" aria-label="音MADスタイルのプリセット">
+            <span class="muted preset-label">ワンクリック設定</span>
+            <button type="button" class="secondary prompt-preset" data-goal="voice" data-prompt="BPM 120、セリフ中心、聞き取りやすく、間を空けて配置">セリフ重視</button>
+            <button type="button" class="secondary prompt-preset" data-goal="rhythm" data-prompt="BPM 140、16分刻み、リズム重視">リズム重視</button>
+            <button type="button" class="secondary prompt-preset" data-goal="chaos" data-prompt="BPM 170、16分刻み、細かく刻む、左右交互、カオス系">高速カオス</button>
+            <button type="button" class="secondary prompt-preset" data-goal="music" data-prompt="BPM 120、原曲のリズムに合わせる、中央定位">曲合わせ</button>
+          </div>
           <p class="muted">対応キーワード・BPM・拍の分割・音程・左右パンを読み取り、素材内の音量ピークも配置やクリップ音量に反映します。例：「BPM 150、16分刻み、左右交互、セリフ中心」。文章の完全な意味理解や音声内容の自動認識には対応していません。</p>
           <div class="toolbar"><button id="clearPromptBtn" class="secondary" type="button">プロンプトを消去</button><button id="applyPromptBtn" class="secondary" type="button">指示を設定に反映</button></div>
+        </div>
+        <div class="field generation-limit-field">
+          <label for="generationClipLimit">生成するクリップ数の上限</label>
+          <select id="generationClipLimit"><option value="16">16（軽め）</option><option value="32">32（標準）</option><option value="48" selected>48（多め）</option><option value="64">64（高密度）</option><option value="80">80（最大）</option></select>
+          <p class="muted">素材数や音の検出状況によって実際の生成数は上限より少なくなります。最初は16〜32で試すと確認しやすくなります。</p>
         </div>
         <div class="primary-action-box">
           <h3>まずはこの3つを使えばOK</h3>
@@ -3183,6 +3204,26 @@ $("clearPromptBtn").addEventListener("click", () => {
   status("プロンプトを消去しました。方向性の設定は変更していません。");
 });
 
+// よく使うスタイルをワンクリックで適用。入力した指示はこのブラウザにのみ保存する。
+const promptStorageKey = "otomad-studio-generation-prompt-v1";
+try {
+  const savedPrompt = localStorage.getItem(promptStorageKey);
+  if (savedPrompt && !$("generationPrompt").value) $("generationPrompt").value = savedPrompt;
+} catch (_) {}
+$("generationPrompt").addEventListener("input", () => {
+  try { localStorage.setItem(promptStorageKey, $("generationPrompt").value); } catch (_) {}
+});
+document.querySelectorAll(".prompt-preset").forEach(button => {
+  button.addEventListener("click", () => {
+    $("aiGoal").value = button.dataset.goal;
+    $("generationPrompt").value = button.dataset.prompt || "";
+    try { localStorage.setItem(promptStorageKey, $("generationPrompt").value); } catch (_) {}
+    $("applyPromptBtn").click();
+    status("「" + button.textContent.trim() + "」プリセットを設定しました。必要に応じてBPMや指示を変更してから生成してください。");
+    $("generationPrompt").focus();
+  });
+});
+
 // ローカル自動構成生成：プロンプト設定を拍同期・クリップ配置に反映する。
 $("autoGenerateBtn").addEventListener("click", () => {
   if (busy || !tracks.length) return;
@@ -3202,9 +3243,11 @@ $("autoGenerateBtn").addEventListener("click", () => {
   if (profile.goal) $("aiGoal").value = profile.goal;
   const sensitivity = Number($("transientSensitivity").value) || 5;
   const baseMaxClips = goal === "chaos" ? 64 : goal === "voice" ? 28 : 48;
-  const maxClips = profile.density === "high" ? Math.min(80, baseMaxClips + 16)
+  const styleClipLimit = profile.density === "high" ? Math.min(80, baseMaxClips + 16)
     : profile.density === "low" ? Math.max(12, Math.floor(baseMaxClips * 0.6))
     : baseMaxClips;
+  const userClipLimit = clamp(Number($("generationClipLimit").value) || 48, 16, 80);
+  const maxClips = Math.min(styleClipLimit, userClipLimit);
   const generated = [];
   const eligibleSources = sources.filter(source => source.end - source.startTrim >= 0.08);
   const buckets = eligibleSources.map(source => {
@@ -3301,7 +3344,7 @@ $("autoGenerateBtn").addEventListener("click", () => {
   renderTracks();
   drawTimeline();
   updateButtons();
-  status("プロンプト生成：" + generated.length + "クリップ、BPM " + bpm +
+  status("プロンプト生成：" + generated.length + "クリップ（上限 " + maxClips + "）、BPM " + bpm +
     "、配置間隔 " + interval.toFixed(3) + "秒" +
     (profile.notes.length ? "。反映：" + profile.notes.join("、") : "。方向性：" + $("aiGoal").selectedOptions[0].textContent) +
     "。"+ (goal === "voice" && buckets.some(bucket => bucket.usedTranscript) ? "AI文字起こしの時間情報を使ってセリフを配置しました。" : "") + "元素材はミュートして保持しています。再生して確認し、Ctrl+Zで全体を取り消せます。");
