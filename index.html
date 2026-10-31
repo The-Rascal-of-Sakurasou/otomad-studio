@@ -1009,6 +1009,131 @@ a:hover{color:#302681}
   *,*::before,*::after{transition:none!important;animation:none!important}
 }
 
+
+/* OtoMAD Studio button color refinement: consistent semantic palette */
+:root{
+  --btn-primary:#5145cd;
+  --btn-primary-hover:#4338b8;
+  --btn-primary-pressed:#3730a3;
+  --btn-secondary-bg:#ffffff;
+  --btn-secondary-hover:#f1f4fa;
+  --btn-secondary-border:#cbd5e1;
+  --btn-secondary-text:#334155;
+  --btn-play:#087f68;
+  --btn-play-hover:#066854;
+  --btn-danger-bg:#fff1f2;
+  --btn-danger-hover:#ffe4e8;
+  --btn-danger-border:#f3bdc7;
+  --btn-danger-text:#a51d32;
+}
+button{
+  border:1px solid transparent;
+  box-shadow:0 1px 2px rgba(15,23,42,.06);
+  text-shadow:none;
+}
+button.primary,#importBtn,#exportBtn,#exportVideoBtn,#prepareSelectedBtn{
+  color:#fff;
+  background:var(--btn-primary);
+  border-color:var(--btn-primary);
+  box-shadow:0 2px 5px rgba(81,69,205,.18);
+}
+button.primary:hover:not(:disabled),#importBtn:hover:not(:disabled),
+#exportBtn:hover:not(:disabled),#exportVideoBtn:hover:not(:disabled),
+#prepareSelectedBtn:hover:not(:disabled){
+  background:var(--btn-primary-hover);
+  border-color:var(--btn-primary-hover);
+  box-shadow:0 3px 8px rgba(81,69,205,.22);
+}
+button.primary:active:not(:disabled),#importBtn:active:not(:disabled),
+#exportBtn:active:not(:disabled),#exportVideoBtn:active:not(:disabled),
+#prepareSelectedBtn:active:not(:disabled){
+  background:var(--btn-primary-pressed);
+}
+button.green,#playBtn,#autoGenerateBtn{
+  color:#fff;
+  background:var(--btn-play);
+  border-color:var(--btn-play);
+  box-shadow:0 2px 5px rgba(8,127,104,.16);
+}
+button.green:hover:not(:disabled),#playBtn:hover:not(:disabled),
+#autoGenerateBtn:hover:not(:disabled){
+  background:var(--btn-play-hover);
+  border-color:var(--btn-play-hover);
+  box-shadow:0 3px 8px rgba(8,127,104,.22);
+}
+button.secondary{
+  color:var(--btn-secondary-text);
+  background:var(--btn-secondary-bg);
+  border:1px solid var(--btn-secondary-border);
+  box-shadow:0 1px 2px rgba(15,23,42,.035);
+}
+button.secondary:hover:not(:disabled){
+  color:#1e293b;
+  background:var(--btn-secondary-hover);
+  border-color:#aab7ca;
+  box-shadow:0 2px 5px rgba(15,23,42,.07);
+}
+button.danger{
+  color:var(--btn-danger-text);
+  background:var(--btn-danger-bg);
+  border:1px solid var(--btn-danger-border);
+}
+button.danger:hover:not(:disabled){
+  color:#881b2d;
+  background:var(--btn-danger-hover);
+  border-color:#e9a3b0;
+}
+button:disabled,button:disabled:hover{
+  color:#8791a3;
+  background:#edf0f5;
+  border-color:#e0e5ed;
+  box-shadow:none;
+  filter:none;
+  opacity:1;
+  cursor:not-allowed;
+}
+button:focus-visible{
+  outline:3px solid rgba(99,102,241,.55);
+  outline-offset:2px;
+}
+/* Keep timeline controls legible on its dark editing surface. */
+#timelinePanel .timeline-tools button,
+#timelinePanel .track button,
+#timelinePanel button.secondary{
+  color:#e5eaf4;
+  background:#263247;
+  border-color:#45536a;
+}
+#timelinePanel .timeline-tools button:hover:not(:disabled),
+#timelinePanel .track button:hover:not(:disabled),
+#timelinePanel button.secondary:hover:not(:disabled){
+  color:#fff;
+  background:#34435d;
+  border-color:#64748b;
+}
+#timelinePanel button.primary,#timelinePanel button.green,
+#timelinePanel #playBtn,#timelinePanel #exportBtn{
+  color:#fff;
+  background:var(--btn-primary);
+  border-color:var(--btn-primary);
+}
+#timelinePanel button.green,#timelinePanel #playBtn{
+  background:var(--btn-play);
+  border-color:var(--btn-play);
+}
+#timelinePanel button.danger{
+  color:#ffd9df;
+  background:#512633;
+  border-color:#8d4052;
+}
+#timelinePanel button.danger:hover:not(:disabled){
+  background:#673041;
+  border-color:#b45a70;
+}
+@media (prefers-reduced-motion:reduce){
+  button{transition:none!important}
+}
+
 </style>
 </head>
 <body>
