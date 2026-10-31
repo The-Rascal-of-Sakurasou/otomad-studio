@@ -1206,7 +1206,7 @@ function updateTrackSourceOptions(id) {
   const select = $(id);
   if (!select) return;
   // Rebuild option DOM only when track IDs or names change.
-  const signature = tracks.map(track => String(track.id) + "\\u0000" + track.name).join("\\u0001");
+  const signature = JSON.stringify(tracks.map(track => [String(track.id), track.name]));
   if (select.dataset.trackOptionsSignature === signature) return;
 
   const previous = select.value;
@@ -1240,7 +1240,7 @@ function updateGroupFilterOptions() {
   const select = $("groupFilter");
   if (!select) return;
   const groups = [...new Set(tracks.map(track => (track.group || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ja"));
-  const signature = groups.join("\\u0001");
+  const signature = JSON.stringify(groups);
   if (select.dataset.groupOptionsSignature !== signature) {
     const previous = select.value;
     const options = document.createDocumentFragment();
@@ -1266,9 +1266,11 @@ function updateGroupFilterOptions() {
 function updateButtons() {
   const hasTracks = tracks.length > 0;
   if (typeof updateVideoExportAvailability === "function") updateVideoExportAvailability();
-  const trackIds = new Set(tracks.map(track => track.id));
-  for (const id of selectedTrackIds) {
-    if (!trackIds.has(id)) selectedTrackIds.delete(id);
+  if (selectedTrackIds.size) {
+    const trackIds = new Set(tracks.map(track => track.id));
+    for (const id of selectedTrackIds) {
+      if (!trackIds.has(id)) selectedTrackIds.delete(id);
+    }
   }
   const selectedCount = selectedTrackIds.size;
   $("selectAllTracksBtn").disabled = busy || !hasTracks || selectedCount === tracks.length;
