@@ -716,7 +716,7 @@ a:hover{color:#312e81}
       <span class="badge">ブラウザ内で処理</span>
     </div>
     <div class="toolbar">
-      <button id="importBtn" class="primary">＋ 音声・動画を追加</button>
+      <button id="importBtn" class="primary" type="button" title="パソコン内の音声・動画ファイルを選択して読み込みます">＋ ファイルから音声・動画を選択</button>
       <button id="playBtn" class="green" disabled title="読み込んだ素材を重ねて再生します">▶ 再生して確認</button>
       <button id="stopBtn" class="secondary" disabled>■ 停止</button>
       <button id="exportBtn" class="primary" disabled title="編集結果を音声ファイルとして保存します">完成音声を保存（WAV）</button>
@@ -739,8 +739,8 @@ a:hover{color:#312e81}
     <input id="projectInput" type="file" accept=".json,application/json" hidden>
     <input id="imageInput" type="file" accept="image/*,.png,.jpg,.jpeg,.gif,.webp,.bmp,.avif" multiple hidden>
     <section id="videoAssetsPanel" class="panel" style="margin-top:12px" aria-label="動画素材">
-      <div class="row spread"><h3 style="margin:0">動画素材</h3><div class="toolbar" style="margin:0"><button id="addVideosBtn" class="secondary" type="button">＋ 動画を追加</button><button id="clearVideosBtn" class="secondary" type="button" disabled>動画を全削除</button></div></div>
-      <p class="muted">動画をプレビューしながら音MADの素材として使えます。読み込み時に音声がある動画は音声トラックにも取り込みます。現在、動画映像そのものの合成・動画ファイルへの書き出しには対応していません。</p>
+      <div class="row spread"><h3 style="margin:0">動画素材</h3><div class="toolbar" style="margin:0"><button id="addVideosBtn" class="secondary" type="button" title="パソコン内の動画ファイルを選択してプレビュー素材に追加します">＋ ファイルから動画を選択</button><button id="clearVideosBtn" class="secondary" type="button" disabled>動画を全削除</button></div></div>
+      <p class="muted">「ファイルから動画を選択」を押すと、パソコン内のファイル選択画面が開きます。動画を選んで開くと、この欄に追加され、サイト内でプレビューできます。音声・動画の編集素材として読み込む場合は、上部の「ファイルから音声・動画を選択」も使用してください。現在、動画映像そのものの合成・動画ファイルへの書き出しには対応していません。</p>
       <input id="videoInput" type="file" accept="video/*,.mp4,.mov,.webm,.m4v,.mkv,.avi" multiple hidden>
       <div id="videoAssets" class="video-assets"><p class="muted">動画はまだ追加されていません。</p></div>
     </section>
