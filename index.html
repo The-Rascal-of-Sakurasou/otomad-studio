@@ -1910,10 +1910,16 @@ async function loadAudioFiles(fileList) {
       }
     };
 
-    // Small batches reduce waiting time while avoiding decoding every large file at once.
-    for (let i = 0; i < audioJobs.length; i += 3) {
-      await Promise.all(audioJobs.slice(i, i + 3).map(decodeAudioFile));
-    }
+    // A small worker pool keeps the decoder busy: a fast file can be replaced
+    // immediately instead of waiting for the slowest file in a fixed batch.
+    let nextAudioJob = 0;
+    const workerCount = Math.min(3, audioJobs.length);
+    await Promise.all(Array.from({ length: workerCount }, async () => {
+      while (nextAudioJob < audioJobs.length) {
+        const item = audioJobs[nextAudioJob++];
+        await decodeAudioFile(item);
+      }
+    }));
 
     // Video audio extraction relies on browser playback/recording, so process it separately.
     for (const item of videoJobs) {
