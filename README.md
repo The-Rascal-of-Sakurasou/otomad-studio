@@ -13,7 +13,8 @@ OtoMAD Studio is a Japanese-first, browser-based editor for 音MAD workflows. It
 - AI speech transcription with selectable Whisper models, language options, timestamped segments, and sequential processing of tracks longer than three minutes. Model download progress is shown; model files are fetched from a CDN and inference runs in the browser.
 - Local audio metrics, quiet-region/transient candidates, and rule-based editing suggestions.
 - Image assets can be imported and used as backgrounds in a simple canvas-based video composition preview.
-- Basic WebM video export combines the current audio mix with an optional looping video background or imported image and a single-line text overlay. Video can be cropped to fill the frame or contained with letterboxing. Export is real-time, browser-dependent, and limited by the five-minute audio renderer.
+- Basic WebM
+- 文字オーバーレイの表示開始・終了秒を指定可能（終了 `0` は最後まで表示）。 video export combines the current audio mix with an optional looping video background or imported image and a single-line text overlay. Video can be cropped to fill the frame or contained with letterboxing. Export is real-time, browser-dependent, and limited by the five-minute audio renderer.
 - Save and reload project settings as JSON. Imported image assets are embedded in the JSON; source audio and video files are not embedded and must be re-imported separately.
 - Export the mix as stereo 16-bit PCM WAV at 44.1 kHz or 48 kHz.
 - Optional compressed audio export using a browser-supported MediaRecorder codec (typically WebM/Opus; other supported containers may be selected by the browser). This records in real time and can take about as long as the mix duration.
