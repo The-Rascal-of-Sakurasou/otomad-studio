@@ -333,6 +333,7 @@ input[type="range"]{accent-color:var(--accent)}
       <button id="playBtn" class="green" disabled title="読み込んだ素材を重ねて再生します">▶ 再生して確認</button>
       <button id="stopBtn" class="secondary" disabled>■ 停止</button>
       <button id="exportBtn" disabled title="編集結果を音声ファイルとして保存します">完成音声を保存（WAV）</button>
+      <button id="preflightBtn" class="secondary" disabled title="書き出し前に音量ピーク、クリップ、長さを検査します">書き出し前チェック</button>
       <button id="saveProjectBtn" class="secondary" title="配置や音量などの設定をJSONファイルに保存します。音声本体は保存されません">編集設定を保存（JSON）</button>
       <button id="loadProjectBtn" class="secondary" title="以前保存したJSON設定を読み込みます。音声素材は別途読み込みが必要です">編集設定を読み込む</button>
       <button id="clearBtn" class="danger">全トラック削除</button>
@@ -877,6 +878,7 @@ function updateButtons() {
   $("repeatTrackBtn").disabled = busy || !hasTracks;
   playBtn.disabled = busy || !hasTracks;
   exportBtn.disabled = busy || !hasTracks;
+  if ($("preflightBtn")) $("preflightBtn").disabled = busy || !hasTracks;
   $("detectBpmBtn").disabled = busy || !hasTracks;
   $("analyzeBtn").disabled = busy || !hasTracks;
   $("aiTranscribeBtn").disabled = busy || !hasTracks;
@@ -2449,6 +2451,46 @@ async function encodeWav(buffer, onProgress = () => {}) {
   }
   return arrayBuffer;
 }
+
+$("preflightBtn").addEventListener("click", async () => {
+  if (busy || !tracks.length) return;
+  stopPlayback();
+  setBusy(true);
+  status("書き出し前チェックを実行しています。ミックスを解析しています…");
+  try {
+    const buffer = await renderMix();
+    let peak = 0, sumSquares = 0, sampleCount = 0, clippedSamples = 0;
+    for (let channelIndex = 0; channelIndex < buffer.numberOfChannels; channelIndex++) {
+      const channel = buffer.getChannelData(channelIndex);
+      for (let i = 0; i < channel.length; i++) {
+        const sample = channel[i];
+        const abs = Math.abs(sample);
+        if (abs > peak) peak = abs;
+        if (abs >= 1) clippedSamples++;
+        sumSquares += sample * sample;
+        sampleCount++;
+      }
+    }
+    const rms = Math.sqrt(sumSquares / Math.max(1, sampleCount));
+    const peakDb = peak > 0 ? 20 * Math.log10(peak) : -Infinity;
+    const rmsDb = rms > 0 ? 20 * Math.log10(rms) : -Infinity;
+    const warnings = [];
+    if (peak >= 1) warnings.push("ピークが0 dBFS以上");
+    if (clippedSamples > 0) warnings.push("振幅が1.0以上のサンプル " + clippedSamples.toLocaleString("ja-JP") + "個");
+    if (rms < 0.01) warnings.push("平均音量がかなり小さい可能性");
+    if (!warnings.length) warnings.push("明確なピーク超過は検出されませんでした");
+    status("書き出し前チェック完了：長さ " + buffer.duration.toFixed(2) + "秒／ピーク " +
+      (Number.isFinite(peakDb) ? peakDb.toFixed(2) + " dBFS" : "無音") +
+      "／RMS " + (Number.isFinite(rmsDb) ? rmsDb.toFixed(2) + " dBFS" : "無音") +
+      "／トラック " + tracks.filter(track => !track.muted).length + "本。結果：" + warnings.join("、") +
+      "。検査は書き出しを保証するものではありません。");
+  } catch (error) {
+    console.error(error);
+    status(error && error.message ? "チェックできませんでした：" + error.message : "書き出し前チェックに失敗しました。素材の長さやメモリ使用量を確認してください。");
+  } finally {
+    setBusy(false);
+  }
+});
 
 exportBtn.addEventListener("click", async () => {
   if (busy || !tracks.length) return;
