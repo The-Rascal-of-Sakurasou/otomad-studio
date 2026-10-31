@@ -762,6 +762,8 @@ footer{color:#7a8498}
         <p class="muted">BPM推定は音量変化からの概算です。声や複雑な素材では誤ることがあるため、生成後にテンポを確認してください。</p>
         <label class="muted" style="display:flex;align-items:center;gap:8px;margin-top:8px"><input id="autoMicroFade" type="checkbox" checked style="width:17px;height:17px">自動生成クリップに短いフェードを付けてクリックノイズを軽減する</label>
         <p class="muted">短いフェードはクリップの開始・終了を滑らかにします。音の立ち上がりがわずかに丸くなる場合はオフにしてください。</p>
+        <label class="muted" style="display:flex;align-items:center;gap:8px;margin-top:8px"><input id="strengthRhythmPlacement" type="checkbox" checked style="width:17px;height:17px">音の強さに応じて配置を変化させる</label>
+        <p class="muted">リズム重視では強い音を拍に、弱めの音を拍の間に配置します。セリフ中心・原曲合わせでは配置を変えません。</p>
         <div class="field" style="margin-top:10px">
           <label for="generationPrompt">作りたい音MADの指示（文章で入力）</label>
           <textarea id="generationPrompt" rows="3" maxlength="500" placeholder="例：BPM 150で、セリフ中心。細かく刻んでテンポの速いカオス系にする"></textarea>
@@ -3952,13 +3954,17 @@ $("autoGenerateBtn").addEventListener("click", () => {
       if (clipLength < 0.04) continue;
       const index = generated.length;
       // 方向性ごとに配置パターンを変え、単調な等間隔配置を避ける。
-      const position = goal === "voice"
+      const basePosition = goal === "voice"
         ? (candidate.speechEnd ? voiceCursor : Math.floor(index / 4) * beat * 4 + (index % 4) * beat)
         : goal === "music"
           ? Math.floor(index / 4) * beat * 4 + (index % 4) * beat
           : goal === "chaos"
             ? index * interval + (index % 5 === 4 ? interval * 0.5 : 0)
             : index * interval;
+      const strengthRatio = clamp((candidate.strength || 0) / maxStrength, 0, 1);
+      const rhythmOffset = $("strengthRhythmPlacement").checked && goal === "rhythm" && strengthRatio < 0.55
+        ? interval * 0.5 : 0;
+      const position = Math.max(0, basePosition + rhythmOffset);
       generated.push({
         ...source,
         id: makeId(),
