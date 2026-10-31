@@ -1297,6 +1297,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
       <div class="toolbar project-secondary-actions" style="margin-top:10px">
         <button id="exportCompressedBtn" class="secondary" disabled title="対応ブラウザでは圧縮音声として保存します。WAVより小さくなりますが、再生時間と同程度の時間がかかります">圧縮音声を保存（WebM/Opus）</button>
         <button id="preflightBtn" class="secondary" disabled title="書き出し前に音量ピーク、クリップ、長さを検査します">書き出し前チェック</button>
+        <button id="environmentCheckBtn" class="secondary" type="button" title="このブラウザで音声編集・動画書き出しに必要な機能を確認します">動作環境チェック</button>
         <button id="preflightCopyBtn" class="secondary" disabled title="直近のチェック結果をテキストとしてコピーします">検査結果をコピー</button>
         <button id="saveProjectBtn" class="secondary" title="配置や音量などの設定をJSONファイルに保存します。音声本体は保存されません">編集設定を保存（JSON）</button>
         <button id="loadProjectBtn" class="secondary" title="以前保存したJSON設定を読み込みます。音声素材は別途読み込みが必要です">編集設定を読み込む</button>
@@ -1305,6 +1306,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
         <button id="clearBtn" class="danger">全トラック削除</button>
       </div>
       <p class="muted">編集設定のJSONには音声本体は含まれません。削除は元に戻せる場合がありますが、実行前に内容を確認してください。</p>
+      <pre id="environmentCheckResults" class="muted" aria-live="polite" style="display:none;white-space:pre-wrap;overflow-wrap:anywhere;padding:10px;border:1px solid var(--border,#d9dee8);border-radius:10px;background:var(--panel-soft,#f7f8fb);font:inherit"></pre>
     </details>
     <input id="fileInput" type="file" accept="audio/*,video/*,.mp4,.mov,.webm,.m4v,.mkv,.avi" multiple hidden>
     <input id="projectInput" type="file" accept=".json,application/json" hidden>
@@ -4177,6 +4179,49 @@ $("preflightCopyBtn").addEventListener("click", async () => {
     area.remove();
     status(copied ? "書き出し前チェックの結果をコピーしました。" : "コピーできませんでした。結果を選択してコピーしてください。");
   }
+});
+
+$("environmentCheckBtn").addEventListener("click", async () => {
+  const results = $("environmentCheckResults");
+  const checks = [];
+  const add = (label, ok, detail = "") => checks.push((ok ? "✓ " : "△ ") + label + (detail ? " — " + detail : ""));
+  const AudioCtor = window.AudioContext || window.webkitAudioContext;
+  add("Web Audio API", !!AudioCtor, AudioCtor ? "利用可能" : "このブラウザでは非対応");
+  add("音声デコード", !!(AudioCtor && AudioCtor.prototype && AudioCtor.prototype.decodeAudioData),
+    AudioCtor && AudioCtor.prototype && AudioCtor.prototype.decodeAudioData ? "decodeAudioData 対応" : "音声読み込みに影響します");
+  add("ファイル選択", !!(window.File && window.FileReader && window.Blob), "File / FileReader / Blob");
+  add("動画録画 API", typeof window.MediaRecorder === "function",
+    typeof window.MediaRecorder === "function" ? "動画書き出し機能の候補" : "動画書き出しは利用できない可能性");
+  let webm = false;
+  try { webm = !!(window.MediaRecorder && MediaRecorder.isTypeSupported &&
+    (MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus") ||
+     MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus") ||
+     MediaRecorder.isTypeSupported("video/webm"))); } catch (_) {}
+  add("WebM書き出し形式", webm, webm ? "対応形式を検出" : "未対応または判定不能");
+  add("WebAssembly", typeof WebAssembly === "object", typeof WebAssembly === "object" ? "利用可能" : "一部AI機能に影響する可能性");
+  add("端末メモリ情報", "deviceMemory" in navigator,
+    "ブラウザ提供値：" + ("deviceMemory" in navigator ? navigator.deviceMemory + " GB" : "取得不可"));
+  add("読み込み済み素材", tracks.length > 0, tracks.length + "トラック");
+  add("安全な接続", location.protocol === "https:" || location.hostname === "localhost",
+    location.protocol + (location.hostname ? "//" + location.hostname : ""));
+  const report = [
+    "OtoMAD Studio 動作環境チェック",
+    "実行時刻：" + new Date().toLocaleString("ja-JP"),
+    "ブラウザ：" + navigator.userAgent,
+    "",
+    ...checks,
+    "",
+    "注意：これはAPIの有無を調べる簡易チェックです。実際のファイル読み込み、再生、書き出しの成功を保証しません。大きなファイルはメモリ不足になる場合があります。"
+  ].join("\n");
+  results.textContent = report;
+  results.style.display = "block";
+  status("動作環境チェックが完了しました。結果を「その他の操作」内で確認できます。");
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(report);
+      status("動作環境チェックが完了し、結果をクリップボードにコピーしました。");
+    }
+  } catch (_) {}
 });
 
 $("preflightBtn").addEventListener("click", async () => {
