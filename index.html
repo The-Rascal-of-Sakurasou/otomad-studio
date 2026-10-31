@@ -753,7 +753,7 @@ a:hover{color:#312e81}
       <div class="row spread"><h3 style="margin:0">映像プレビュー・動画書き出し</h3><span class="stat">最大5分 / WebM対応ブラウザ</span></div>
       <p class="muted">動画または画像を背景にし、文字を重ねて、現在の音声ミックスと合成した動画を書き出します。映像素材の長さに関わらず、音声ミックスの長さで出力します。</p>
       <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px">
-        <div class="field"><label for="videoSourceInput">背景動画（任意）</label><input id="videoSourceInput" type="file" accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov,.m4v"></div>
+        <div class="field"><label for="videoSourceInput">背景動画（任意）</label><input id="videoSourceInput" type="file" accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov,.m4v"><button id="clearVideoSourceBtn" class="secondary" type="button" style="margin-top:6px">動画背景を解除</button></div>
         <div class="field"><label for="videoImageSelect">背景画像（動画がない場合）</label><select id="videoImageSelect"><option value="">単色背景</option></select></div>
         <div class="field"><label for="videoFitMode">映像の表示方法</label><select id="videoFitMode"><option value="cover">画面いっぱい（端を切り取る）</option><option value="contain">全体を表示（余白あり）</option></select></div>
         <div class="field"><label for="videoOverlayText">画面に重ねる文字</label><input id="videoOverlayText" type="text" maxlength="120" placeholder="例：作品名・セリフ"></div>
@@ -1522,6 +1522,7 @@ imageInput.addEventListener("change", () => {
 
 // 映像プレビューと、現在の音声ミックスを合成したWebM書き出し。
 const videoSourceInput = $("videoSourceInput");
+const clearVideoSourceBtn = $("clearVideoSourceBtn");
 const videoImageSelect = $("videoImageSelect");
 const videoOverlayText = $("videoOverlayText");
 const videoFitMode = $("videoFitMode");
@@ -1617,7 +1618,9 @@ videoSourceInput.addEventListener("change", () => {
   videoSourceElement.preload = "auto";
   videoSourceElement.src = videoSourceUrl;
   videoSourceElement.addEventListener("loadeddata", () => {
-    videoSourceElement.play().catch(() => {});
+    videoSourceElement.play().then(() => {
+      if (!videoDrawFrame) videoDrawFrame = requestAnimationFrame(animateVideoPreview);
+    }).catch(() => {});
     drawVideoPreview();
   }, { once: true });
   videoSourceElement.addEventListener("error", () => {
@@ -1627,12 +1630,26 @@ videoSourceInput.addEventListener("change", () => {
   videoExportBtn.disabled = !(window.MediaRecorder && videoPreviewCanvas.captureStream && tracks.length);
   drawVideoPreview();
 });
+clearVideoSourceBtn.addEventListener("click", () => {
+  if (videoSourceElement) {
+    videoSourceElement.pause();
+    videoSourceElement.removeAttribute("src");
+    videoSourceElement.load();
+    videoSourceElement = null;
+  }
+  if (videoSourceUrl) URL.revokeObjectURL(videoSourceUrl);
+  videoSourceUrl = "";
+  videoSourceInput.value = "";
+  drawVideoPreview();
+  videoExportProgress.textContent = "動画背景を解除しました。画像または単色背景を使用できます。";
+});
 videoImageSelect.addEventListener("change", drawVideoPreview);
 videoFitMode.addEventListener("change", drawVideoPreview);
 videoOverlayText.addEventListener("input", drawVideoPreview);
 
 function setVideoComposerLocked(locked) {
   videoSourceInput.disabled = locked;
+  clearVideoSourceBtn.disabled = locked || !videoSourceElement;
   videoImageSelect.disabled = locked;
   videoFitMode.disabled = locked;
   videoOverlayText.disabled = locked;
