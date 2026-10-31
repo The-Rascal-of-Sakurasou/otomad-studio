@@ -461,6 +461,11 @@ input[type="range"]{accent-color:var(--accent)}
             <option value="48000">48,000 Hz</option>
           </select>
         </div>
+        <label class="row" style="font-size:13px;margin-top:10px">
+          <input id="preventClipping" type="checkbox" checked>
+          書き出し時に音割れを抑える（ピークを-1 dBFS以下に調整）
+        </label>
+        <p class="muted">音割れ防止は全体のピークが目標値を超えた場合のみ音量を下げます。音量を自動で上げる処理は行いません。</p>
         <p class="muted">保存形式はWAV（16-bit PCM・ステレオ）です。
         大きなプロジェクトはメモリ不足になる場合があります。</p>
       </section>
@@ -1231,17 +1236,17 @@ function drawWaveform(canvas, track) {
   ctx.clearRect(0, 0, width, height);
 
   // Match the light UI theme so waveform contrast remains consistent.
-  ctx.fillStyle = "#e7ebf5";
+  ctx.fillStyle = "#20202b";
   ctx.fillRect(0, 0, width, height);
 
   const duration = track.buffer.duration;
   const left = track.startTrim / duration * width;
   const right = track.end / duration * width;
 
-  ctx.fillStyle = "#dce3fb";
+  ctx.fillStyle = "#342b4c";
   ctx.fillRect(left, 0, Math.max(0, right - left), height);
 
-  ctx.strokeStyle = "#b8c2d8";
+  ctx.strokeStyle = "#51496b";
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(0, height / 2);
@@ -1251,7 +1256,7 @@ function drawWaveform(canvas, track) {
   const data = track.buffer.getChannelData(0);
   const samplesPerPixel = Math.max(1, Math.floor(data.length / width));
 
-  ctx.strokeStyle = "#4f46e5";
+  ctx.strokeStyle = "#c4b5fd";
   ctx.lineWidth = 1;
   ctx.beginPath();
 
@@ -1271,7 +1276,7 @@ function drawWaveform(canvas, track) {
 
   ctx.stroke();
 
-  ctx.strokeStyle = "#0f766e";
+  ctx.strokeStyle = "#f0abfc";
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(left, 0);
@@ -1282,7 +1287,7 @@ function drawWaveform(canvas, track) {
 
   // Trim handles: clear visual markers with a small grip at each boundary.
   for (const x of [left, right]) {
-    ctx.fillStyle = "#0f766e";
+    ctx.fillStyle = "#f0abfc";
     ctx.fillRect(Math.max(0, Math.min(width - 3, x - 1.5)), 0, 3, height);
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(Math.max(0, Math.min(width - 5, x - 2.5)), height / 2 - 5, 5, 10);
@@ -1623,7 +1628,7 @@ function drawTimeline() {
   const height = canvas.height;
 
   ctx.clearRect(0, 0, width, height);
-  ctx.fillStyle = "#f7f8fc";
+  ctx.fillStyle = "#14141b";
   ctx.fillRect(0, 0, width, height);
 
   const totalDuration = Math.max(getMixDuration(), 10);
@@ -1634,8 +1639,8 @@ function drawTimeline() {
   const scale = usable / duration;
 
   ctx.font = "12px system-ui";
-  ctx.fillStyle = "#59647e";
-  ctx.strokeStyle = "#d8deea";
+  ctx.fillStyle = "#a1a1aa";
+  ctx.strokeStyle = "#343441";
 
   // BPMに合わせた拍グリッド。4拍ごとの小節線を強調する。
   const bpm = clamp(Number(bpmInput.value) || 120, 40, 240);
@@ -1648,7 +1653,7 @@ function drawTimeline() {
     const x = left + sec * scale;
     if (x > right) break;
     const isBar = Math.abs(sec / (beatSeconds * 4) - Math.round(sec / (beatSeconds * 4))) < 0.001;
-    ctx.strokeStyle = isBar ? "#aab4cc" : "#e0e5ef";
+    ctx.strokeStyle = isBar ? "#45455a" : "#292936";
     ctx.lineWidth = isBar ? 1.4 : 1;
     ctx.beginPath();
     ctx.moveTo(x, 8);
@@ -1672,10 +1677,10 @@ function drawTimeline() {
     const x = left + track.position * scale;
     const w = getTrackOutputDuration(track) * scale;
 
-    ctx.fillStyle = track.muted ? "#aab2c2" : "#818cf8";
+    ctx.fillStyle = track.muted ? "#555560" : "#8b75d8";
     ctx.fillRect(x, y, Math.max(2, Math.min(w, right - x)), barHeight);
 
-    ctx.fillStyle = "#26304a";
+    ctx.fillStyle = "#f4f4f8";
     ctx.fillText(
       (i + 1) + ". " + track.name.slice(0, 24),
       5, y + barHeight - 1
@@ -1704,13 +1709,13 @@ function drawTimeline() {
     const elapsed = playbackOffset + (performance.now() - playbackStartedAt) / 1000;
     const x = left + elapsed * scale;
     if (elapsed <= playbackDuration && x >= left && x <= right) {
-      ctx.strokeStyle = "#0f766e";
+      ctx.strokeStyle = "#6ee7b7";
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(x, 7);
       ctx.lineTo(x, height - 7);
       ctx.stroke();
-      ctx.fillStyle = "#0f766e";
+      ctx.fillStyle = "#6ee7b7";
       ctx.fillText(elapsed.toFixed(2) + "s", Math.min(x + 4, right - 42), 10);
     }
   }
@@ -2452,6 +2457,23 @@ exportBtn.addEventListener("click", async () => {
 
   try {
     const buffer = await renderMix();
+    let exportNote = "";
+    if ($("preventClipping").checked) {
+      let peak = 0;
+      for (let channelIndex = 0; channelIndex < buffer.numberOfChannels; channelIndex++) {
+        const channel = buffer.getChannelData(channelIndex);
+        for (let i = 0; i < channel.length; i++) peak = Math.max(peak, Math.abs(channel[i]));
+      }
+      const targetPeak = Math.pow(10, -1 / 20); // -1 dBFS
+      if (peak > targetPeak) {
+        const gain = targetPeak / peak;
+        for (let channelIndex = 0; channelIndex < buffer.numberOfChannels; channelIndex++) {
+          const channel = buffer.getChannelData(channelIndex);
+          for (let i = 0; i < channel.length; i++) channel[i] *= gain;
+        }
+        exportNote = " 音割れ防止のため全体音量を " + (20 * Math.log10(gain)).toFixed(1) + " dB調整しました。";
+      }
+    }
     const wav = encodeWav(buffer);
     const url = URL.createObjectURL(
       new Blob([wav], { type: "audio/wav" })
@@ -2463,7 +2485,7 @@ exportBtn.addEventListener("click", async () => {
     link.click();
 
     setTimeout(() => URL.revokeObjectURL(url), 30000);
-    status("WAVファイルを書き出しました。");
+    status("WAVファイルを書き出しました。" + exportNote);
   } catch (error) {
     console.error(error);
     const message = error && error.message ? error.message : "";
