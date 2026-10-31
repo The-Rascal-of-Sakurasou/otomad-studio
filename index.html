@@ -1230,17 +1230,18 @@ function drawWaveform(canvas, track) {
   ctx.scale(dpr, dpr);
   ctx.clearRect(0, 0, width, height);
 
-  ctx.fillStyle = "#20202b";
+  // Match the light UI theme so waveform contrast remains consistent.
+  ctx.fillStyle = "#e7ebf5";
   ctx.fillRect(0, 0, width, height);
 
   const duration = track.buffer.duration;
   const left = track.startTrim / duration * width;
   const right = track.end / duration * width;
 
-  ctx.fillStyle = "#342b4c";
+  ctx.fillStyle = "#dce3fb";
   ctx.fillRect(left, 0, Math.max(0, right - left), height);
 
-  ctx.strokeStyle = "#51496b";
+  ctx.strokeStyle = "#b8c2d8";
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(0, height / 2);
@@ -1250,7 +1251,7 @@ function drawWaveform(canvas, track) {
   const data = track.buffer.getChannelData(0);
   const samplesPerPixel = Math.max(1, Math.floor(data.length / width));
 
-  ctx.strokeStyle = "#c4b5fd";
+  ctx.strokeStyle = "#4f46e5";
   ctx.lineWidth = 1;
   ctx.beginPath();
 
@@ -1270,7 +1271,7 @@ function drawWaveform(canvas, track) {
 
   ctx.stroke();
 
-  ctx.strokeStyle = "#f0abfc";
+  ctx.strokeStyle = "#0f766e";
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(left, 0);
@@ -1281,7 +1282,7 @@ function drawWaveform(canvas, track) {
 
   // Trim handles: clear visual markers with a small grip at each boundary.
   for (const x of [left, right]) {
-    ctx.fillStyle = "#f0abfc";
+    ctx.fillStyle = "#0f766e";
     ctx.fillRect(Math.max(0, Math.min(width - 3, x - 1.5)), 0, 3, height);
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(Math.max(0, Math.min(width - 5, x - 2.5)), height / 2 - 5, 5, 10);
@@ -2609,7 +2610,8 @@ function projectSettings() {
       delay: t.delay,
       reverb: t.reverb,
       muted: t.muted,
-      solo: t.solo
+      solo: t.solo,
+      group: t.group || ""
     }))
   };
 }
@@ -2656,15 +2658,20 @@ projectInput.addEventListener("change", async () => {
         ? project.snapDivision : 1);
 
     let restored = 0;
+    // Duplicate filenames are common when importing clips from the same source.
+    // Match each saved entry to a distinct current track instead of repeatedly
+    // applying every entry to the first track with that name.
+    const restoredTrackIds = new Set();
 
     for (const saved of project.tracks) {
-      const track = tracks.find(t => t.name === saved.name);
+      const track = tracks.find(t => t.name === saved.name && !restoredTrackIds.has(t.id));
       if (!track) continue;
+      restoredTrackIds.add(track.id);
 
       for (const key of [
         "position", "startTrim", "end", "volume", "pitch", "pan",
         "fadeIn", "fadeOut", "lowpass", "highpass", "delay", "reverb",
-        "muted", "solo"
+        "muted", "solo", "group"
       ]) {
         if (saved[key] !== undefined) track[key] = saved[key];
       }
